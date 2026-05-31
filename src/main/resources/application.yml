@@ -5,6 +5,8 @@ spring:
     username: root
     password: 12345
 
+#ai-server:
+#url: "" 
   jpa:
     hibernate:
       ddl-auto: update

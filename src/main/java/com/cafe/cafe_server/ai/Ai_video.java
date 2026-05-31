@@ -1,7 +1,9 @@
 package com.cafe.cafe_server.ai;
 
-import jakarta.annotation.PostConstruct; // Spring Boot 2.x 버전이라면 javax.annotation.PostConstruct 로 변경
-import jakarta.annotation.PreDestroy;  // Spring Boot 2.x 버전이라면 javax.annotation.PreDestroy 로 변경
+import jakarta.annotation.PostConstruct;
+import jakarta.annotation.PreDestroy;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.CrossOrigin;
@@ -19,81 +21,101 @@ import java.util.concurrent.atomic.AtomicReference;
 
 @RestController
 @RequestMapping("/api/video")
-@CrossOrigin(origins = "*")
+@CrossOrigin(originPatterns = "*") // 기존 origins = "*" 에서 발생하던 CORS 에러 방지용 패턴으로 수정
 public class Ai_video {
 
-    // AI로부터 받은 가장 최신 JPEG 이미지를 스레드 안전하게 보관하는 변수
+    // 💡 표준 로깅 라이브러리 설정
+    private static final Logger log = LoggerFactory.getLogger(Ai_video.class);
+
     private final AtomicReference<byte[]> latestFrame = new AtomicReference<>(null);
     private ServerSocket serverSocket;
     private Thread receiverThread;
 
-    // 스프링부트 실행 시 자동으로 TCP 서버를 백그라운드에서 구동
     @PostConstruct
     public void startTcpServer() {
         receiverThread = new Thread(() -> {
             try {
-                // 파이썬 코드의 DEFAULT_PORT인 5001번을 엽니다.
                 serverSocket = new ServerSocket(5001);
-                System.out.println("[TCP Server] AI 영상 수신용 TCP 포트 5001번 개방");
+                log.info("============= [TCP Server] AI 영상 수신용 TCP 포트 5001번 개방 =============");
 
                 while (!Thread.currentThread().isInterrupted()) {
                     try {
                         Socket socket = serverSocket.accept();
-                        System.out.println("[TCP Server] AI 클라이언트 연결됨: " + socket.getInetAddress());
+                        // 🟢 AI 접속 확인 로그
+                        log.info("🟢 [TCP Server] AI 클라이언트 연결 성공! (접속 IP: {})", socket.getInetAddress());
                         handleAiClient(socket);
                     } catch (IOException e) {
                         if (!serverSocket.isClosed()) {
-                            System.err.println("TCP 소켓 연결 에러: " + e.getMessage());
+                            log.error("❌ [TCP Server] 소켓 연결 수락 중 에러 발생: {}", e.getMessage());
                         }
                     }
                 }
             } catch (IOException e) {
-                e.printStackTrace();
+                log.error("❌ [TCP Server] 서버 소켓 초기화 실패: {}", e.getMessage());
             }
         });
         receiverThread.setDaemon(true);
         receiverThread.start();
     }
 
-    // 파이썬 클라이언트가 보낸 패킷(데이터)을 해석하는 메서드
     private void handleAiClient(Socket socket) {
         try (DataInputStream dis = new DataInputStream(socket.getInputStream())) {
+            
             // 1. 처음엔 JSON 메타데이터 수신
             int metaLength = dis.readInt();
             if (metaLength > 0) {
                 byte[] metaBytes = new byte[metaLength];
-                dis.readFully(metaBytes); // 정확히 길이만큼 바이트를 읽어옴
+                dis.readFully(metaBytes);
                 String metadata = new String(metaBytes, StandardCharsets.UTF_8);
-                System.out.println("[TCP Server] 메타데이터 수신: " + metadata);
+                // 📂 메타데이터 확인 로그
+                log.info("📂 [TCP Server] AI로부터 메타데이터 수신 완료: {}", metadata);
             }
 
             // 2. 이후부터는 계속해서 JPEG 프레임 수신
+            boolean isFirstFrame = true;
+            int frameCounter = 0;
+
             while (true) {
-                int frameLength = dis.readInt(); // !I 구조체 (4바이트)
+                int frameLength = dis.readInt();
                 
-                // 프레임 길이가 0이면 전송 종료(End marker)
                 if (frameLength == 0) {
-                    System.out.println("[TCP Server] AI 스트림 전송 완료 및 종료");
+                    log.info("🏁 [TCP Server] AI 클라이언트가 스트림 전송 완료 시그널(End Marker)을 보냈습니다.");
                     break;
                 }
 
+                // 아까 발생했던 OutOfMemoryError 방지를 위한 안전장치 (20MB 초과 시 차단)
+                if (frameLength > 20_000_000 || frameLength < 0) {
+                    throw new IOException("비정상적인 프레임 크기 감지 및 차단: " + frameLength + " bytes");
+                }
+
                 byte[] frameBytes = new byte[frameLength];
-                dis.readFully(frameBytes); // 프레임 바이트 읽기
-                
-                // Next.js로 보낼 최신 프레임을 메모리에 갱신
+                dis.readFully(frameBytes);
                 latestFrame.set(frameBytes);
+
+                // 📸 프레임 수신 확인 실시간 로그
+                if (isFirstFrame) {
+                    log.info("📸 [TCP Server] 최초 영상 프레임 수신 성공! (첫 프레임 크기: {} bytes) 이제 실시간 스트리밍이 활성화됩니다.", frameLength);
+                    isFirstFrame = false;
+                }
+
+                frameCounter++;
+                // 너무 많은 로그로 도배되는 것을 막기 위해 100프레임마다 생존 신고 로그 출력 (약 3초마다 1번)
+                if (frameCounter % 100 == 0) {
+                    log.info("🔄 [TCP Server] 영상 프레임 수신 중... (현재 누적 수신: {} 프레임)", frameCounter);
+                }
             }
         } catch (Exception e) {
-            System.out.println("[TCP Server] AI 클라이언트 연결 끊김: " + e.getMessage());
+            // 🔴 AI 끊김 확인 로그
+            log.warn("🔴 [TCP Server] AI 클라이언트 연결이 종료되었습니다. (원인: {})", e.getMessage());
         } finally {
             try { socket.close(); } catch (IOException ignored) {}
         }
     }
 
-    // 스프링부트 종료 시 TCP 소켓 닫기
     @PreDestroy
     public void stopTcpServer() {
         try {
+            log.info("종료 절차 시작: TCP 서버 소켓을 닫습니다.");
             if (serverSocket != null && !serverSocket.isClosed()) {
                 serverSocket.close();
             }
@@ -101,21 +123,19 @@ public class Ai_video {
                 receiverThread.interrupt();
             }
         } catch (IOException e) {
-            e.printStackTrace();
+            log.error("TCP 서버 종료 중 에러: {}", e.getMessage());
         }
     }
 
-    // =========================================================
-    // Next.js (클라이언트) 방향으로 영상을 쏴주는 HTTP 스트리밍 API
-    // =========================================================
     @GetMapping("/stream")
     public ResponseEntity<StreamingResponseBody> streamVideo() {
+        log.info("👀 [HTTP Stream] Next.js 브라우저 뷰어가 /stream 에 연결을 시도했습니다.");
+        
         StreamingResponseBody responseBody = outputStream -> {
             try {
                 while (true) {
                     byte[] frame = latestFrame.get();
                     if (frame != null) {
-                        // MJPEG 스트림 형식으로 Next.js 브라우저가 영상을 인식하게 함
                         outputStream.write(("--frame\r\n").getBytes());
                         outputStream.write(("Content-Type: image/jpeg\r\n").getBytes());
                         outputStream.write(("Content-Length: " + frame.length + "\r\n\r\n").getBytes());
@@ -123,11 +143,10 @@ public class Ai_video {
                         outputStream.write(("\r\n").getBytes());
                         outputStream.flush();
                     }
-                    // 프레임을 너무 빨리 읽어서 CPU가 과부하 걸리는 것을 방지 (약 30fps)
                     Thread.sleep(33);
                 }
             } catch (Exception e) {
-                System.out.println("[HTTP Stream] Next.js 클라이언트 뷰어 연결 종료");
+                log.info("👋 [HTTP Stream] Next.js 브라우저 뷰어가 연결을 종료했습니다.");
             }
         };
 
