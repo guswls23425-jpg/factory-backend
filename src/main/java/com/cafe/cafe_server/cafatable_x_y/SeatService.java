@@ -37,8 +37,8 @@ public class SeatService {
             
             dto.setPosX(seat.getPosX());
             dto.setPosY(seat.getPosY());
-            
-            
+            dto.setPersonCount(seat.getPersonCount() != null ? seat.getPersonCount() : 0);
+
             return dto;
         }).collect(Collectors.toList());
     }
@@ -64,6 +64,7 @@ public class SeatService {
             seat.setAwayTime(dto.getAwayTime());
             seat.setPosX(dto.getPosX());
             seat.setPosY(dto.getPosY());
+            seat.setPersonCount(dto.getPersonCount() != null ? dto.getPersonCount() : 0);
             seat.setCafe(cafe);
             
             seatRepository.save(seat);

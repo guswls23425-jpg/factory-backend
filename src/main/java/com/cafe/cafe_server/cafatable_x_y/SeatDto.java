@@ -10,7 +10,7 @@ public class SeatDto {
     private String name;
     private String status;
     private String awayTime;
-    private Integer posX;  // ← 직접 flat하게
-    private Integer posY;  // ← 직접 flat하게
-    // Position 클래스 통째로 삭제
+    private Integer posX;
+    private Integer posY;
+    private Integer personCount; // 테이블에 앉은 사람 수 (0~4)
 }
