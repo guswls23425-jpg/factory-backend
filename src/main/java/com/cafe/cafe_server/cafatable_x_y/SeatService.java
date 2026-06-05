@@ -38,6 +38,7 @@ public class SeatService {
             dto.setPosX(seat.getPosX());
             dto.setPosY(seat.getPosY());
             dto.setPersonCount(seat.getPersonCount() != null ? seat.getPersonCount() : 0);
+            dto.setFloorName(seat.getFloorName() != null ? seat.getFloorName() : "1층");
 
             return dto;
         }).collect(Collectors.toList());
@@ -65,6 +66,7 @@ public class SeatService {
             seat.setPosX(dto.getPosX());
             seat.setPosY(dto.getPosY());
             seat.setPersonCount(dto.getPersonCount() != null ? dto.getPersonCount() : 0);
+            seat.setFloorName(dto.getFloorName() != null ? dto.getFloorName() : "1층");
             seat.setCafe(cafe);
             
             seatRepository.save(seat);

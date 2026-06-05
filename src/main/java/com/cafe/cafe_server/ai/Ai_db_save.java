@@ -24,43 +24,92 @@ public class Ai_db_save {
     private final Ai_db_Repository aiDetailLogRepository;
     private final ObjectMapper objectMapper; // Map을 JSON 문자열로 변환해 주는 도구
 
+    // ──────────────────────────────────────────────────────────────────
+    // AI가 보내는 status 코드 → 프론트/DB에서 사용하는 status 코드로 변환
+    //
+    // AI 코드(status_code)       →  DB 저장값
+    //   table_in_use             →  active
+    //   table_away               →  away
+    //   table_exit               →  available
+    //   table_cleaning           →  cleaning
+    //   liquid_spill             →  cleaning   (액체 흘림 = 청소 필요)
+    //   unpaid_suspected         →  away       (미결제 의심 = 자리비움으로 처리)
+    // ──────────────────────────────────────────────────────────────────
+    private String mapAiStatus(String aiStatus) {
+        if (aiStatus == null) return "available";
+        return switch (aiStatus.toLowerCase()) {
+            case "table_in_use"      -> "active";
+            case "table_away"        -> "away";
+            case "table_exit"        -> "available";
+            case "table_cleaning"    -> "cleaning";
+            case "liquid_spill"      -> "cleaning";    // 청소 필요로 처리
+            case "unpaid_suspected"  -> "away";        // 자리비움으로 처리
+            default -> {
+                log.warn("⚠️ 알 수 없는 AI status 코드: [{}] → available 로 대체", aiStatus);
+                yield "available";
+            }
+        };
+    }
+
     @Transactional
     public void saveAndNotifyAiData(AiUpdateDto dto) {
         if (dto.getSeats() == null) return;
 
         for (Map<String, Object> seatMap : dto.getSeats()) {
-            // 1. 가변 Map 데이터에서 필수 필드 추출
             if (!seatMap.containsKey("seatId") || !seatMap.containsKey("status")) continue;
-            
-            Long seatId = Long.valueOf(seatMap.get("seatId").toString());
-            String status = seatMap.get("status").toString().toLowerCase();
-            String awayTime = seatMap.containsKey("awayTime") ? seatMap.get("awayTime").toString() : "";
 
+            // ── 1. AI 필드 추출 ──────────────────────────────────────────
+            Long   seatId          = Long.valueOf(seatMap.get("seatId").toString());
+            String rawAiStatus     = seatMap.get("status").toString();          // AI 원본 코드
+            String mappedStatus    = mapAiStatus(rawAiStatus);                  // DB 저장용 변환값
+            String awayTime        = seatMap.getOrDefault("awayTime",   "").toString();
+            String statusLabel     = seatMap.getOrDefault("statusLabel","").toString(); // 한글 라벨
+            String legacyStatus    = seatMap.getOrDefault("legacyStatus","").toString(); // AI 내부 원본
+            Integer personCount    = seatMap.containsKey("personCount")
+                    ? Integer.valueOf(seatMap.get("personCount").toString()) : null;
+            Integer statusDuration = seatMap.containsKey("statusDuration")
+                    ? Integer.valueOf(seatMap.get("statusDuration").toString()) : null;
+
+            log.info("🪑 seatId={} | AI원본={} → DB저장={} | 라벨={} | awayTime={}",
+                    seatId, rawAiStatus, mappedStatus, statusLabel, awayTime);
+
+            // ── 2. Seat 테이블 업데이트 (실시간 현황판 반영) ─────────────
             Optional<Seat> seatOpt = seatRepository.findById(seatId);
-            if (seatOpt.isPresent()) {
-                Seat seat = seatOpt.get();
-
-                // 2. 실시간 좌석 현황판 동기화를 위해 기존 Seat 상태 변경
-                seat.setStatus(status);
-                seat.setAwayTime(awayTime);
-                seatRepository.save(seat);
-
-                // 3. 통계용 로그 기록을 위해 AiDetailLog 테이블에 저장
-                Ai_table logEntity = new Ai_table();
-                logEntity.setSeat(seat);
-                logEntity.setStatus(status);
-                logEntity.setAwayTime(awayTime);
-
-                try {
-                    // 🌟 핵심: 들어온 Map 전체를 JSON 문자열로 압축해서 가변 컬럼에 저장!
-                    String rawJson = objectMapper.writeValueAsString(seatMap);
-                    logEntity.setRawJsonData(rawJson);
-                } catch (Exception e) {
-                    log.error("JSON 가변 데이터 압축 실패", e);
-                }
-
-                aiDetailLogRepository.save(logEntity);
+            if (seatOpt.isEmpty()) {
+                log.warn("⚠️ seatId={} 에 해당하는 좌석이 DB에 없습니다. 스킵합니다.", seatId);
+                continue;
             }
+
+            Seat seat = seatOpt.get();
+            seat.setStatus(mappedStatus);
+            seat.setAwayTime(awayTime);
+
+            if (personCount != null) {
+                seat.setPersonCount(Math.max(0, Math.min(4, personCount)));
+            }
+            // cleaning 상태 진입 시 사람 수 자동 초기화
+            if ("cleaning".equals(mappedStatus)) {
+                seat.setPersonCount(0);
+            }
+            seatRepository.save(seat);
+
+            // ── 3. ai_detail_log 테이블에 이력 기록 ──────────────────────
+            Ai_table logEntity = new Ai_table();
+            logEntity.setSeat(seat);
+            logEntity.setStatus(mappedStatus);
+            logEntity.setRawAiStatus(rawAiStatus);       // AI 원본 코드 보존
+            logEntity.setStatusLabel(statusLabel);        // 한글 라벨
+            logEntity.setLegacyStatus(legacyStatus);      // AI 내부 원본
+            logEntity.setAwayTime(awayTime);
+            logEntity.setStatusDuration(statusDuration);
+
+            try {
+                logEntity.setRawJsonData(objectMapper.writeValueAsString(seatMap));
+            } catch (Exception e) {
+                log.error("JSON 직렬화 실패", e);
+            }
+
+            aiDetailLogRepository.save(logEntity);
         }
     }
 }

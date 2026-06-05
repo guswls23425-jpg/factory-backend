@@ -22,14 +22,25 @@ public class Ai_table {
     private Seat seat;
 
     @Column(nullable = false)
-    private String status; 
+    private String status;          // 변환된 DB 저장값 (active / away / available / cleaning)
+
+    @Column(name = "raw_ai_status")
+    private String rawAiStatus;     // AI가 보낸 원본 코드 (table_in_use, liquid_spill 등)
+
+    @Column(name = "status_label")
+    private String statusLabel;     // AI 한글 라벨 (테이블사용, 자리비움 등)
+
+    @Column(name = "legacy_status")
+    private String legacyStatus;    // AI 내부 원본 키 (active, no_drink, spill 등)
 
     @Column(name = "away_time")
-    private String awayTime; 
+    private String awayTime;
 
-    // 💡 나중에 어떤 가변 데이터(나이, 성별 등)가 들어올지 모르니 JSON 통째로 담을 텍스트 공간
+    @Column(name = "status_duration")
+    private Integer statusDuration; // 해당 상태가 지속된 시간(초)
+
     @Column(columnDefinition = "TEXT", name = "raw_json_data")
-    private String rawJsonData;
+    private String rawJsonData;     // AI가 보낸 전체 JSON (확장성 보존용)
 
     @Column(name = "created_at", nullable = false)
     private LocalDateTime createdAt;

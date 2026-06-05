@@ -13,4 +13,5 @@ public class SeatDto {
     private Integer posX;
     private Integer posY;
     private Integer personCount; // 테이블에 앉은 사람 수 (0~4)
+    private String floorName;   // 층 이름 (1층, 2층, ...)
 }
