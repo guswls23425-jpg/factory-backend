@@ -1,7 +1,5 @@
 package com.cafe.cafe_server.cafatable_x_y;
 
-//import com.cafe.cafe_server.cafatable_x_y.SeatDto;
-//import com.cafe.cafe_server.cafatable_x_y.SeatService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -12,7 +10,7 @@ import java.util.Map;
 @RestController
 @RequestMapping("/api/seats")
 @RequiredArgsConstructor
-@CrossOrigin(origins = {"http://localhost:3000", "http://34.64.58.23:3000", "*"})
+@CrossOrigin(originPatterns = "*", allowCredentials = "false")
 public class SeatController {
 
     private final SeatService seatService;
@@ -24,7 +22,6 @@ public class SeatController {
             List<SeatDto> seats = seatService.getSeatsByCafeName(cafeName);
             return ResponseEntity.ok(seats);
         } catch (IllegalArgumentException e) {
-            // 👇 404 에러를 던지는 대신, 텅 빈 리스트를 정상(200 OK) 응답으로 보냄!
             return ResponseEntity.ok(java.util.Collections.emptyList());
         }
     }
@@ -45,7 +42,6 @@ public class SeatController {
             List<FloorDto> floors = seatService.getFloorsByCafeName(cafeName);
             return ResponseEntity.ok(floors);
         } catch (IllegalArgumentException e) {
-            // 카페 없으면 1층 빈 배열로 응답
             FloorDto floor1 = new FloorDto();
             floor1.setFloorNumber(1);
             floor1.setLabel("1층");

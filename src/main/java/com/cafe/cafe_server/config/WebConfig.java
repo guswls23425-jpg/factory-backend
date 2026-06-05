@@ -8,9 +8,10 @@ import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
 public class WebConfig implements WebMvcConfigurer {
     @Override
     public void addCorsMappings(CorsRegistry registry) {
-        registry.addMapping("/**") // 모든 API 주소에 대해
-                .allowedOrigins("http://localhost:3000") // Next.js의 접근을 허용
+        registry.addMapping("/**")
+                .allowedOriginPatterns("*")   // allowCredentials와 함께 와일드카드 허용
                 .allowedMethods("GET", "POST", "PUT", "DELETE", "OPTIONS")
-                .allowCredentials(true);
+                .allowedHeaders("*")
+                .allowCredentials(false);     // 쿠키 불필요 → false로 충돌 방지
     }
 }

@@ -14,23 +14,28 @@ public class Seat {
     @Column(name = "seat_id")
     private Long id;
 
-    private String name;        // 예: "테이블 1"
-    private String status;      // "active", "away", "available"
-    private String awayTime;    // 자리비움 시간 (null 가능)
+    private String name;
+    private String status;
+    private String awayTime;
 
     @Column(name = "pos_x")
-    private Integer posX;       // 드래그 앤 드롭 X 좌표
+    private Integer posX;
 
     @Column(name = "pos_y")
-    private Integer posY;       // 드래그 앤 드롭 Y 좌표
+    private Integer posY;
 
     @Column(name = "person_count", nullable = false, columnDefinition = "INT DEFAULT 0")
-    private Integer personCount = 0; // 테이블에 앉은 사람 수 (0~4)
+    private Integer personCount = 0;
 
+    // 층 번호 (정수) — 신규 방식
     @Column(name = "floor_number", nullable = false, columnDefinition = "INT DEFAULT 1")
-    private Integer floorNumber = 1; // 층 번호 (1층 = 1)
+    private Integer floorNumber = 1;
+
+    // 층 이름 (문자열) — 기존 GCP 호환용
+    @Column(name = "floor_name", columnDefinition = "VARCHAR(50) DEFAULT '1층'")
+    private String floorName = "1층";
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "cafe_id")
-    private Cafe cafe;          // 어느 카페의 좌석인지 연결 (FK)
+    private Cafe cafe;
 }

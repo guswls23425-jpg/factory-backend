@@ -12,6 +12,7 @@ public class SeatDto {
     private String awayTime;
     private Integer posX;
     private Integer posY;
-    private Integer personCount;  // 테이블에 앉은 사람 수 (0~4)
-    private Integer floorNumber; // 층 번호 (기본값 1)
+    private Integer personCount;
+    private Integer floorNumber; // 층 번호 (기본값 1) — 신규
+    private String floorName;    // 층 이름 (기본값 "1층") — 기존 GCP 호환
 }
