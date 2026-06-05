@@ -12,7 +12,7 @@ import java.util.Map;
 @RestController
 @RequestMapping("/api/seats")
 @RequiredArgsConstructor
-@CrossOrigin(origins = "http://localhost:3000") // Next.js 서버의 접근을 허용 (CORS 해결)
+@CrossOrigin(originPatterns = "*", allowCredentials = "false")
 public class SeatController {
 
     private final SeatService seatService;

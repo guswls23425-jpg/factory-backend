@@ -16,7 +16,7 @@ import java.util.List;
 
 @RestController
 @RequestMapping("/api/auth")
-@CrossOrigin(origins = "http://localhost:3000")
+@CrossOrigin(originPatterns = "*", allowCredentials = "false")
 public class AuthController {
 
     private final OwnerRepository ownerRepository;
@@ -96,7 +96,8 @@ public class AuthController {
 
             Map<String, Object> responseBody = new HashMap<>();
             responseBody.put("message", realCafeName + " 사장님 환영합니다!");
-            responseBody.put("ownerId", loggedInOwner.getId()); // 사장님 고유 ID
+            responseBody.put("ownerId", loggedInOwner.getId());
+            responseBody.put("cafeId", loggedInOwner.getCafe().getId()); // 프론트 localStorage용
             responseBody.put("cafeName", realCafeName);
             
             return ResponseEntity.ok(responseBody);

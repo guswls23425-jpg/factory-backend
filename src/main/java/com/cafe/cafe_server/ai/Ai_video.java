@@ -21,7 +21,7 @@ import java.util.concurrent.atomic.AtomicReference;
 
 @RestController
 @RequestMapping("/api/video")
-@CrossOrigin(originPatterns = "*") // 기존 origins = "*" 에서 발생하던 CORS 에러 방지용 패턴으로 수정
+@CrossOrigin(originPatterns = "*", allowCredentials = "false")
 public class Ai_video {
 
     // 💡 표준 로깅 라이브러리 설정

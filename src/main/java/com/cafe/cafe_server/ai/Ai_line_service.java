@@ -12,7 +12,7 @@ import java.util.Map;
 @RestController
 @RequestMapping("/api/ai")
 @RequiredArgsConstructor
-@CrossOrigin(origins = "*") // AI 및 Next.js 양쪽 통신 모두 허용
+@CrossOrigin(originPatterns = "*", allowCredentials = "false")
 public class Ai_line_service {
 
     private final Ai_db_save aiService;
