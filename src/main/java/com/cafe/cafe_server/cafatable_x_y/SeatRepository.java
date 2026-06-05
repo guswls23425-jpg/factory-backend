@@ -6,5 +6,7 @@ import java.util.List;
 
 public interface SeatRepository extends JpaRepository<Seat, Long> {
     List<Seat> findByCafeId(Long cafeId);
-    void deleteByCafeId(Long cafeId); // 배치 변경 시 기존 좌석을 초기화하고 재저장할 때 사용
+    List<Seat> findByCafeIdAndFloorNumber(Long cafeId, Integer floorNumber);
+    void deleteByCafeId(Long cafeId);
+    void deleteByCafeIdAndFloorNumber(Long cafeId, Integer floorNumber);
 }

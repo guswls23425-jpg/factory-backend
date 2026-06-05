@@ -28,8 +28,10 @@ public class Cafe {
     @JoinColumn(name = "owner_id")
     private Owner owner;
 
-    // ✨ 👇 바로 이 부분입니다! (이 코드가 있어야 setSeats가 작동합니다)
     @OneToMany(mappedBy = "cafe", cascade = CascadeType.ALL, orphanRemoval = true)
     private List<Seat> seats = new ArrayList<>();
+
+    @OneToMany(mappedBy = "cafe", cascade = CascadeType.ALL, orphanRemoval = true)
+    private List<Floor> floors = new ArrayList<>();
     
 }
