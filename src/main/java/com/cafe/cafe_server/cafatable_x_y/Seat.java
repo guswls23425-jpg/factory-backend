@@ -27,6 +27,9 @@ public class Seat {
     @Column(name = "person_count", nullable = false, columnDefinition = "INT DEFAULT 0")
     private Integer personCount = 0; // 테이블에 앉은 사람 수 (0~4)
 
+    @Column(name = "floor_number", nullable = false, columnDefinition = "INT DEFAULT 1")
+    private Integer floorNumber = 1; // 층 번호 (1층 = 1)
+
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "cafe_id")
     private Cafe cafe;          // 어느 카페의 좌석인지 연결 (FK)

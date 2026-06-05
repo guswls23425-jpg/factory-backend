@@ -12,7 +12,7 @@ import java.util.Map;
 @RestController
 @RequestMapping("/api/seats")
 @RequiredArgsConstructor
-@CrossOrigin(origins = "http://localhost:3000") // Next.js 서버의 접근을 허용 (CORS 해결)
+@CrossOrigin(origins = {"http://localhost:3000", "http://34.64.58.23:3000", "*"})
 public class SeatController {
 
     private final SeatService seatService;
@@ -29,14 +29,37 @@ public class SeatController {
         }
     }
 
-    // 📢 사장님 모드에서 [변경사항 저장]을 누를 때: 배치 데이터 저장하기
-    // URL 예시: POST http://localhost:8080/api/seats/save
+    // 📢 사장님 모드에서 [변경사항 저장]을 누를 때: 배치 데이터 저장하기 (기존 단일층)
     @PostMapping("/save")
     public ResponseEntity<?> saveCafeSeats(
-            @RequestParam("cafeName") String cafeName, // 👇 여기도 동일하게 추가!
+            @RequestParam("cafeName") String cafeName,
             @RequestBody List<SeatDto> seatDtos) {
-        
         seatService.saveSeats(cafeName, seatDtos);
-        return ResponseEntity.ok(Map.of("message", "배치 정보가 안전하게 데이터베이스에 저장되었습니다."));
+        return ResponseEntity.ok(Map.of("message", "배치 정보가 저장되었습니다."));
+    }
+
+    // 📢 층별 좌석 전체 조회
+    @GetMapping("/floors")
+    public ResponseEntity<List<FloorDto>> getFloors(@RequestParam("cafeName") String cafeName) {
+        try {
+            List<FloorDto> floors = seatService.getFloorsByCafeName(cafeName);
+            return ResponseEntity.ok(floors);
+        } catch (IllegalArgumentException e) {
+            // 카페 없으면 1층 빈 배열로 응답
+            FloorDto floor1 = new FloorDto();
+            floor1.setFloorNumber(1);
+            floor1.setLabel("1층");
+            floor1.setSeats(java.util.Collections.emptyList());
+            return ResponseEntity.ok(List.of(floor1));
+        }
+    }
+
+    // 📢 층별 좌석 전체 저장
+    @PostMapping("/floors/save")
+    public ResponseEntity<?> saveFloors(
+            @RequestParam("cafeName") String cafeName,
+            @RequestBody List<FloorDto> floorDtos) {
+        seatService.saveFloors(cafeName, floorDtos);
+        return ResponseEntity.ok(Map.of("message", "층별 배치 정보가 저장되었습니다."));
     }
 }
