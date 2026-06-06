@@ -21,7 +21,7 @@ import java.util.concurrent.atomic.AtomicReference;
 
 @RestController
 @RequestMapping("/api/video")
-@CrossOrigin(originPatterns = "*", allowCredentials = "false")
+//@CrossOrigin(originPatterns = "*", allowCredentials = "false")
 public class Ai_video {
 
     // 💡 표준 로깅 라이브러리 설정

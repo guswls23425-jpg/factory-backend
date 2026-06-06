@@ -12,7 +12,7 @@ import java.util.Map;
 @RestController
 @RequestMapping("/api/ai")
 @RequiredArgsConstructor
-@CrossOrigin(originPatterns = "*", allowCredentials = "false")
+//@CrossOrigin(originPatterns = "*", allowCredentials = "false")
 public class Ai_line_service {
 
     private final Ai_db_save aiService;

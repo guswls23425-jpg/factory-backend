@@ -64,6 +64,7 @@ public class Ai_db_save {
             case "needs_cleaning"    -> "cleaning";
             case "spill"             -> "cleaning";
             case "non_purchase"      -> "away";
+            case "order_check"       -> "away";
             default -> {
                 log.warn("⚠️ 알 수 없는 AI status 코드: [{}] → available 로 대체", aiStatus);
                 yield "available";
