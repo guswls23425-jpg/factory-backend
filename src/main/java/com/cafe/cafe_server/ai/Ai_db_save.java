@@ -115,7 +115,11 @@ public class Ai_db_save {
             log.info("🪑 [{}] {}번째 좌석(DB id={}) | AI원본={} → DB저장={} | awayTime={}",
                     cafeName, seatIndex + 1, seat.getId(), rawAiStatus, mappedStatus, awayTime);
 
-            // ── Seat 테이블 업데이트 ──────────────────────────────────────────
+            // ── 상태 변화 감지 ────────────────────────────────────────────────
+            String prevStatus = seat.getStatus();                 // 변경 전 상태
+            boolean statusChanged = !mappedStatus.equals(prevStatus);
+
+            // ── Seat 테이블 업데이트 (매번 덮어씀 — 현황판 최신화) ──────────────
             seat.setStatus(mappedStatus);
             seat.setAwayTime(awayTime);
 
@@ -127,22 +131,27 @@ public class Ai_db_save {
             }
             seatRepository.save(seat);
 
-            // ── ai_detail_log 이력 기록 ───────────────────────────────────────
-            Ai_table logEntity = new Ai_table();
-            logEntity.setSeat(seat);
-            logEntity.setStatus(mappedStatus);
-            logEntity.setRawAiStatus(rawAiStatus);
-            logEntity.setStatusLabel(statusLabel);
-            logEntity.setLegacyStatus(legacyStatus);
-            logEntity.setAwayTime(awayTime);
-            logEntity.setStatusDuration(statusDuration);
+            // ── ai_detail_log 이력 기록 (상태가 바뀔 때만 INSERT) ──────────────
+            if (statusChanged) {
+                log.info("🔔 상태 변화 감지 → 좌석 {} : [{}] → [{}] (로그 저장)",
+                        seatIndex + 1, prevStatus, mappedStatus);
 
-            try {
-                logEntity.setRawJsonData(objectMapper.writeValueAsString(seatMap));
-            } catch (Exception e) {
-                log.error("JSON 직렬화 실패", e);
+                Ai_table logEntity = new Ai_table();
+                logEntity.setSeat(seat);
+                logEntity.setStatus(mappedStatus);
+                logEntity.setRawAiStatus(rawAiStatus);
+                logEntity.setStatusLabel(statusLabel);
+                logEntity.setLegacyStatus(legacyStatus);
+                logEntity.setAwayTime(awayTime);
+                logEntity.setStatusDuration(statusDuration);
+
+                try {
+                    logEntity.setRawJsonData(objectMapper.writeValueAsString(seatMap));
+                } catch (Exception e) {
+                    log.error("JSON 직렬화 실패", e);
+                }
+                aiDetailLogRepository.save(logEntity);
             }
-            aiDetailLogRepository.save(logEntity);
         }
     }
 }
