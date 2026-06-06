@@ -1,5 +1,7 @@
 package com.cafe.cafe_server.ai;
 
+import com.cafe.cafe_server.cafatable_x_y.Cafe;
+import com.cafe.cafe_server.cafatable_x_y.CafeRepository;
 import com.cafe.cafe_server.cafatable_x_y.Seat;
 import com.cafe.cafe_server.cafatable_x_y.SeatRepository;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -8,6 +10,8 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.Comparator;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 
@@ -16,34 +20,50 @@ import java.util.Optional;
 @RequiredArgsConstructor
 public class Ai_db_save {
 
-    // 🌟 [여기에 입력!] application.yml의 ai-server.url 값을 이 변수에 주입하겠다는 뜻일세.
-    //@Value("${ai-server.url}")
-    //private String aiServerUrl;
+    private final SeatRepository    seatRepository;
+    private final CafeRepository    cafeRepository;
+    private final Ai_db_Repository  aiDetailLogRepository;
+    private final ObjectMapper      objectMapper;
 
-    private final SeatRepository seatRepository;
-    private final Ai_db_Repository aiDetailLogRepository;
-    private final ObjectMapper objectMapper; // Map을 JSON 문자열로 변환해 주는 도구
-
-    // ──────────────────────────────────────────────────────────────────
-    // AI가 보내는 status 코드 → 프론트/DB에서 사용하는 status 코드로 변환
+    // ──────────────────────────────────────────────────────────────────────────
+    // AI status 코드 → DB 저장값 변환
     //
-    // AI 코드(status_code)       →  DB 저장값
-    //   table_in_use             →  active
-    //   table_away               →  away
-    //   table_exit               →  available
-    //   table_cleaning           →  cleaning
-    //   liquid_spill             →  cleaning   (액체 흘림 = 청소 필요)
-    //   unpaid_suspected         →  away       (미결제 의심 = 자리비움으로 처리)
-    // ──────────────────────────────────────────────────────────────────
+    // [AI가 보내는 코드]         [DB 저장값]     [의미]
+    //  table_in_use        →   active          사용 중 (원래 규격)
+    //  table_away          →   away            자리비움 (원래 규격)
+    //  table_exit          →   available       퇴장 (원래 규격)
+    //  table_cleaning      →   cleaning        청소 중 (원래 규격)
+    //  liquid_spill        →   cleaning        액체 흘림 (원래 규격)
+    //  unpaid_suspected    →   away            미결제 의심 (원래 규격)
+    //  ----- AI 현재 코드 (추가) -----
+    //  active              →   active          사용 중
+    //  available           →   available       빈자리
+    //  away                →   away            자리비움
+    //  no_drink            →   away            음료 없이 착석
+    //  long_away           →   away            장시간 자리비움
+    //  needs_cleaning      →   cleaning        정리 필요
+    //  spill               →   cleaning        음료 쏟음
+    //  non_purchase        →   away            미결제 의심
+    // ──────────────────────────────────────────────────────────────────────────
     private String mapAiStatus(String aiStatus) {
         if (aiStatus == null) return "available";
         return switch (aiStatus.toLowerCase()) {
+            // 원래 규격 (백엔드 기대값)
             case "table_in_use"      -> "active";
             case "table_away"        -> "away";
             case "table_exit"        -> "available";
             case "table_cleaning"    -> "cleaning";
-            case "liquid_spill"      -> "cleaning";    // 청소 필요로 처리
-            case "unpaid_suspected"  -> "away";        // 자리비움으로 처리
+            case "liquid_spill"      -> "cleaning";
+            case "unpaid_suspected"  -> "away";
+            // AI 현재 코드 (직접 매핑 추가)
+            case "active"            -> "active";
+            case "available"         -> "available";
+            case "away"              -> "away";
+            case "no_drink"          -> "away";
+            case "long_away"         -> "away";
+            case "needs_cleaning"    -> "cleaning";
+            case "spill"             -> "cleaning";
+            case "non_purchase"      -> "away";
             default -> {
                 log.warn("⚠️ 알 수 없는 AI status 코드: [{}] → available 로 대체", aiStatus);
                 yield "available";
@@ -52,54 +72,68 @@ public class Ai_db_save {
     }
 
     @Transactional
-    public void saveAndNotifyAiData(AiUpdateDto dto) {
-        if (dto.getSeats() == null) return;
+    public void saveAndNotifyAiData(String cafeName, AiUpdateDto dto) {
+        if (dto.getSeats() == null || dto.getSeats().isEmpty()) return;
+
+        // 카페 조회
+        Optional<Cafe> cafeOpt = cafeRepository.findByName(cafeName);
+        if (cafeOpt.isEmpty()) {
+            log.warn("⚠️ 카페 [{}]를 DB에서 찾을 수 없습니다. 관리자가 배치를 저장했는지 확인하세요.", cafeName);
+            return;
+        }
+        Cafe cafe = cafeOpt.get();
+
+        // 해당 카페의 좌석 목록을 seat_id 오름차순으로 정렬 (AI의 1,2,3... 인덱스 기준)
+        List<Seat> cafeSeats = seatRepository.findByCafeId(cafe.getId());
+        cafeSeats.sort(Comparator.comparing(Seat::getId));
+
+        log.info("📋 카페 [{}] 좌석 수: {}석", cafeName, cafeSeats.size());
 
         for (Map<String, Object> seatMap : dto.getSeats()) {
             if (!seatMap.containsKey("seatId") || !seatMap.containsKey("status")) continue;
 
-            // ── 1. AI 필드 추출 ──────────────────────────────────────────
-            Long   seatId          = Long.valueOf(seatMap.get("seatId").toString());
-            String rawAiStatus     = seatMap.get("status").toString();          // AI 원본 코드
-            String mappedStatus    = mapAiStatus(rawAiStatus);                  // DB 저장용 변환값
-            String awayTime        = seatMap.getOrDefault("awayTime",   "").toString();
-            String statusLabel     = seatMap.getOrDefault("statusLabel","").toString(); // 한글 라벨
-            String legacyStatus    = seatMap.getOrDefault("legacyStatus","").toString(); // AI 내부 원본
-            Integer personCount    = seatMap.containsKey("personCount")
+            // ── AI 필드 추출 ──────────────────────────────────────────────────
+            int seatIndex = Integer.parseInt(seatMap.get("seatId").toString()) - 1; // 1-based → 0-based
+            String rawAiStatus  = seatMap.get("status").toString();
+            String mappedStatus = mapAiStatus(rawAiStatus);
+            String awayTime     = seatMap.getOrDefault("awayTime",    "").toString();
+            String statusLabel  = seatMap.getOrDefault("statusLabel", "").toString();
+            String legacyStatus = seatMap.getOrDefault("legacyStatus","").toString();
+            Integer personCount = seatMap.containsKey("personCount")
                     ? Integer.valueOf(seatMap.get("personCount").toString()) : null;
             Integer statusDuration = seatMap.containsKey("statusDuration")
                     ? Integer.valueOf(seatMap.get("statusDuration").toString()) : null;
 
-            log.info("🪑 seatId={} | AI원본={} → DB저장={} | 라벨={} | awayTime={}",
-                    seatId, rawAiStatus, mappedStatus, statusLabel, awayTime);
-
-            // ── 2. Seat 테이블 업데이트 (실시간 현황판 반영) ─────────────
-            Optional<Seat> seatOpt = seatRepository.findById(seatId);
-            if (seatOpt.isEmpty()) {
-                log.warn("⚠️ seatId={} 에 해당하는 좌석이 DB에 없습니다. 스킵합니다.", seatId);
+            // ── 인덱스로 좌석 조회 ────────────────────────────────────────────
+            if (seatIndex < 0 || seatIndex >= cafeSeats.size()) {
+                log.warn("⚠️ seatId(인덱스)={} 가 범위를 벗어났습니다. (전체 {}석) 스킵합니다.",
+                        seatIndex + 1, cafeSeats.size());
                 continue;
             }
+            Seat seat = cafeSeats.get(seatIndex);
 
-            Seat seat = seatOpt.get();
+            log.info("🪑 [{}] {}번째 좌석(DB id={}) | AI원본={} → DB저장={} | awayTime={}",
+                    cafeName, seatIndex + 1, seat.getId(), rawAiStatus, mappedStatus, awayTime);
+
+            // ── Seat 테이블 업데이트 ──────────────────────────────────────────
             seat.setStatus(mappedStatus);
             seat.setAwayTime(awayTime);
 
             if (personCount != null) {
                 seat.setPersonCount(Math.max(0, Math.min(4, personCount)));
             }
-            // cleaning 상태 진입 시 사람 수 자동 초기화
             if ("cleaning".equals(mappedStatus)) {
                 seat.setPersonCount(0);
             }
             seatRepository.save(seat);
 
-            // ── 3. ai_detail_log 테이블에 이력 기록 ──────────────────────
+            // ── ai_detail_log 이력 기록 ───────────────────────────────────────
             Ai_table logEntity = new Ai_table();
             logEntity.setSeat(seat);
             logEntity.setStatus(mappedStatus);
-            logEntity.setRawAiStatus(rawAiStatus);       // AI 원본 코드 보존
-            logEntity.setStatusLabel(statusLabel);        // 한글 라벨
-            logEntity.setLegacyStatus(legacyStatus);      // AI 내부 원본
+            logEntity.setRawAiStatus(rawAiStatus);
+            logEntity.setStatusLabel(statusLabel);
+            logEntity.setLegacyStatus(legacyStatus);
             logEntity.setAwayTime(awayTime);
             logEntity.setStatusDuration(statusDuration);
 
@@ -108,7 +142,6 @@ public class Ai_db_save {
             } catch (Exception e) {
                 log.error("JSON 직렬화 실패", e);
             }
-
             aiDetailLogRepository.save(logEntity);
         }
     }
