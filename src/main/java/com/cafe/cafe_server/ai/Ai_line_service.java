@@ -46,11 +46,13 @@ public class Ai_line_service {
             ));
         }
 
-        log.info("📡 AI 데이터 수신 — 카페: [{}], 좌석 수: {}",
-                cafeName, aiUpdateDto.getSeats() == null ? 0 : aiUpdateDto.getSeats().size());
+        int seatCount = aiUpdateDto.getSeats() == null ? 0 : aiUpdateDto.getSeats().size();
+        log.info("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+        log.info("📡 [AI 데이터 수신] 카페: [{}] | 좌석 {}건", cafeName, seatCount);
 
         aiService.saveAndNotifyAiData(cafeName, aiUpdateDto);
 
+        log.info("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
         return ResponseEntity.ok(Map.of(
                 "status", "SUCCESS",
                 "message", "AI 데이터가 DB 저장 및 좌석 갱신에 성공했습니다."

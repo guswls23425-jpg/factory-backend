@@ -87,7 +87,11 @@ public class Ai_db_save {
         List<Seat> cafeSeats = seatRepository.findByCafeId(cafe.getId());
         cafeSeats.sort(Comparator.comparing(Seat::getId));
 
-        log.info("📋 카페 [{}] 좌석 수: {}석", cafeName, cafeSeats.size());
+        log.info("📋 카페 [{}] 좌석 수: {}석 | 수신 좌석 업데이트 수: {}",
+                cafeName, cafeSeats.size(), dto.getSeats().size());
+
+        int savedCount   = 0; // 실제 DB 저장된 좌석 수
+        int changedCount = 0; // 상태가 변화한 좌석 수
 
         for (Map<String, Object> seatMap : dto.getSeats()) {
             if (!seatMap.containsKey("seatId") || !seatMap.containsKey("status")) continue;
@@ -116,7 +120,7 @@ public class Ai_db_save {
                     cafeName, seatIndex + 1, seat.getId(), rawAiStatus, mappedStatus, awayTime);
 
             // ── 상태 변화 감지 ────────────────────────────────────────────────
-            String prevStatus = seat.getStatus();                 // 변경 전 상태
+            String prevStatus = seat.getStatus();
             boolean statusChanged = !mappedStatus.equals(prevStatus);
 
             // ── Seat 테이블 업데이트 (매번 덮어씀 — 현황판 최신화) ──────────────
@@ -131,10 +135,15 @@ public class Ai_db_save {
             }
             seatRepository.save(seat);
 
+            // ── DB 저장 성공 로그 ─────────────────────────────────────────────
+            log.info("✅ [DB 저장 완료] 카페={} | 좌석 {} (DB id={}) | 상태={} | awayTime={}",
+                    cafeName, seatIndex + 1, seat.getId(), mappedStatus, awayTime.isBlank() ? "-" : awayTime);
+
             // ── ai_detail_log 이력 기록 (상태가 바뀔 때만 INSERT) ──────────────
             if (statusChanged) {
-                log.info("🔔 상태 변화 감지 → 좌석 {} : [{}] → [{}] (로그 저장)",
-                        seatIndex + 1, prevStatus, mappedStatus);
+                changedCount++;
+                log.info("🔔 [상태 변화] 카페={} | 좌석 {} : [{}] → [{}] → 이력 로그 저장",
+                        cafeName, seatIndex + 1, prevStatus, mappedStatus);
 
                 Ai_table logEntity = new Ai_table();
                 logEntity.setSeat(seat);
@@ -151,7 +160,14 @@ public class Ai_db_save {
                     log.error("JSON 직렬화 실패", e);
                 }
                 aiDetailLogRepository.save(logEntity);
+                log.info("📝 [이력 저장 완료] 카페={} | 좌석 {} | AI원본={} → DB={}",
+                        cafeName, seatIndex + 1, rawAiStatus, mappedStatus);
             }
+            savedCount++;
         }
+
+        // ── 전체 처리 완료 요약 로그 ──────────────────────────────────────────
+        log.info("🎉 [AI 데이터 처리 완료] 카페={} | 수신={}건 | DB저장={}건 | 상태변화={}건",
+                cafeName, dto.getSeats().size(), savedCount, changedCount);
     }
 }
