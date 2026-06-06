@@ -10,7 +10,7 @@ import java.util.Map;
 @RestController
 @RequestMapping("/api/seats")
 @RequiredArgsConstructor
-@CrossOrigin(originPatterns = "*", allowCredentials = "false")
+//@CrossOrigin(originPatterns = "*", allowCredentials = "false")
 public class SeatController {
 
     private final SeatService seatService;

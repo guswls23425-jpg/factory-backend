@@ -1,5 +1,8 @@
 package com.cafe.cafe_server.cafatable_x_y;
 
+import java.util.ArrayList;
+import java.util.List;
+
 import jakarta.persistence.*;
 import lombok.Getter;
 import lombok.Setter;
@@ -38,4 +41,8 @@ public class Seat {
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "cafe_id")
     private Cafe cafe;
+
+    // Seat.java 하단에 이 코드를 추가해두면 나중에 삭제 충돌이 일어나지 않습니다.
+    @OneToMany(mappedBy = "seat", cascade = CascadeType.REMOVE, orphanRemoval = true)
+    private List<com.cafe.cafe_server.ai.Ai_table> aiLogs = new ArrayList<>();
 }
