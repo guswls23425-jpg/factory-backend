@@ -92,12 +92,17 @@ public class Ai_video {
 
                 byte[] frameBytes = new byte[frameLength];
                 dis.readFully(frameBytes);
-                latestFrame.set(frameBytes);
 
-                // 📸 프레임 수신 확인 실시간 로그
-                if (isFirstFrame) {
-                    log.info("📸 [TCP Server] 최초 영상 프레임 수신 성공! (첫 프레임 크기: {} bytes) 이제 실시간 스트리밍이 활성화됩니다.", frameLength);
-                    isFirstFrame = false;
+                // 유효한 JPEG 크기(최소 1KB)만 저장 — 220 bytes 같은 비정상 프레임 무시
+                if (frameLength >= 1024) {
+                    latestFrame.set(frameBytes);
+
+                    if (isFirstFrame) {
+                        log.info("📸 [TCP Server] 최초 유효 프레임 수신! (크기: {} bytes)", frameLength);
+                        isFirstFrame = false;
+                    }
+                } else {
+                    log.warn("⚠️ [TCP Server] 작은 프레임 무시 ({} bytes) — 유효한 JPEG가 아닐 수 있음", frameLength);
                 }
 
                 frameCounter++;
