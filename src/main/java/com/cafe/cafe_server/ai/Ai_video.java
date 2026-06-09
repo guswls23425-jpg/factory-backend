@@ -41,9 +41,11 @@ public class Ai_video {
                 while (!Thread.currentThread().isInterrupted()) {
                     try {
                         Socket socket = serverSocket.accept();
-                        // 🟢 AI 접속 확인 로그
                         log.info("🟢 [TCP Server] AI 클라이언트 연결 성공! (접속 IP: {})", socket.getInetAddress());
-                        handleAiClient(socket);
+                        // 별도 스레드에서 처리 — accept 루프가 블로킹되지 않도록
+                        Thread clientThread = new Thread(() -> handleAiClient(socket));
+                        clientThread.setDaemon(true);
+                        clientThread.start();
                     } catch (IOException e) {
                         if (!serverSocket.isClosed()) {
                             log.error("❌ [TCP Server] 소켓 연결 수락 중 에러 발생: {}", e.getMessage());
