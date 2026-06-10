@@ -89,21 +89,33 @@ public class AiTcpReceiver {
                 byte[] data = new byte[len];
                 dis.readFully(data);
 
-                if (isJson(data)) {
+                // Python 클라이언트는 첫 바이트로 패킷 타입을 보냄
+                // PACKET_TYPE_JPEG = 1, PACKET_TYPE_STATUS_JSON = 2
+                // 타입 바이트가 있으면 제거한 뒤 처리
+                byte[] payload;
+                boolean hasTypeByte = len > 1 && (data[0] == 1 || data[0] == 2);
+                if (hasTypeByte) {
+                    payload = new byte[len - 1];
+                    System.arraycopy(data, 1, payload, 0, len - 1);
+                } else {
+                    payload = data;
+                }
+
+                if (data[0] == 2 || (!hasTypeByte && isJson(payload))) {
                     // JSON 상태 데이터 → DB 저장
-                    routeJson(data);
+                    routeJson(payload);
                 } else {
                     // JPEG 프레임 → 영상 스트림
-                    if (len >= 1024) {
-                        videoFrameStore.setFrame(data);
+                    if (payload.length >= 1024) {
+                        videoFrameStore.setFrame(payload);
                         frameCount++;
                         if (frameCount == 1) {
-                            log.info("📸 [TCP] 첫 유효 프레임 수신 ({} bytes)", len);
+                            log.info("📸 [TCP] 첫 유효 프레임 수신 ({} bytes)", payload.length);
                         } else if (frameCount % 100 == 0) {
                             log.info("🔄 [TCP] 프레임 수신 중... {}프레임", frameCount);
                         }
                     } else {
-                        log.warn("⚠️ [TCP] 작은 패킷 무시 ({} bytes)", len);
+                        log.warn("⚠️ [TCP] 작은 패킷 무시 ({} bytes)", payload.length);
                     }
                 }
             }
