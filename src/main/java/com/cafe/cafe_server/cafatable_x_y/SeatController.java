@@ -58,4 +58,22 @@ public class SeatController {
         seatService.saveFloors(cafeName, floorDtos);
         return ResponseEntity.ok(Map.of("message", "층별 배치 정보가 저장되었습니다."));
     }
+
+    // 📢 단일 좌석 상태 직접 업데이트 (프론트 수동 인원 조작용 — AI 데이터 덮어쓰기 방지)
+    @PatchMapping("/status")
+    public ResponseEntity<?> updateSeatStatus(
+            @RequestParam("cafeName") String cafeName,
+            @RequestBody Map<String, Object> body) {
+        try {
+            String seatName   = (String) body.get("name");
+            int floorNumber   = Integer.parseInt(body.get("floorNumber").toString());
+            String status     = body.containsKey("status") ? (String) body.get("status") : null;
+            Integer personCount = body.containsKey("personCount")
+                    ? Integer.parseInt(body.get("personCount").toString()) : null;
+            seatService.updateSeatStatus(cafeName, floorNumber, seatName, status, personCount);
+            return ResponseEntity.ok(Map.of("message", "좌석 상태가 업데이트되었습니다."));
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
+        }
+    }
 }

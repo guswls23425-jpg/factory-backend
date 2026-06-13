@@ -143,6 +143,19 @@ public class SeatService {
         }
     }
 
+    // ── 단일 좌석 상태 직접 업데이트 (프론트 수동 조작용) ──────────────────────
+    @Transactional
+    public void updateSeatStatus(String cafeName, int floorNumber, String seatName, String status, Integer personCount) {
+        Cafe cafe = cafeRepository.findByName(cafeName)
+                .orElseThrow(() -> new IllegalArgumentException("존재하지 않는 카페입니다."));
+        Seat seat = seatRepository
+                .findByCafeIdAndFloorNumberAndName(cafe.getId(), floorNumber, seatName)
+                .orElseThrow(() -> new IllegalArgumentException("존재하지 않는 좌석입니다."));
+        if (status != null) seat.setStatus(status);
+        if (personCount != null) seat.setPersonCount(Math.max(0, Math.min(4, personCount)));
+        seatRepository.save(seat);
+    }
+
     // ── 기존 단일 층 조회 (하위 호환) ─────────────────────────────────────────
     @Transactional(readOnly = true)
     public List<SeatDto> getSeatsByCafeName(String cafeName) {
