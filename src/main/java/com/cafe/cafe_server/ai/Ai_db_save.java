@@ -4,12 +4,15 @@ import com.cafe.cafe_server.cafatable_x_y.Cafe;
 import com.cafe.cafe_server.cafatable_x_y.CafeRepository;
 import com.cafe.cafe_server.cafatable_x_y.Seat;
 import com.cafe.cafe_server.cafatable_x_y.SeatRepository;
+import com.cafe.cafe_server.sse.SeatSseEmitterService;
+import com.cafe.cafe_server.sse.SeatUpdateEvent;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
@@ -20,10 +23,11 @@ import java.util.Optional;
 @RequiredArgsConstructor
 public class Ai_db_save {
 
-    private final SeatRepository    seatRepository;
-    private final CafeRepository    cafeRepository;
-    private final Ai_db_Repository  aiDetailLogRepository;
-    private final ObjectMapper      objectMapper;
+    private final SeatRepository       seatRepository;
+    private final CafeRepository       cafeRepository;
+    private final Ai_db_Repository     aiDetailLogRepository;
+    private final ObjectMapper         objectMapper;
+    private final SeatSseEmitterService sseEmitterService;
 
     // ──────────────────────────────────────────────────────────────────────────
     // AI status 코드 → DB 저장값 변환
@@ -178,5 +182,17 @@ public class Ai_db_save {
         // ── 전체 처리 완료 요약 로그 ──────────────────────────────────────────
         log.info("🎉 [AI 데이터 처리 완료] 카페={} | 수신={}건 | DB저장={}건 | 상태변화={}건",
                 cafeName, dto.getSeats().size(), savedCount, changedCount);
+
+        // ── SSE broadcast: 이번 배치에서 처리된 좌석 상태를 연결된 클라이언트 전체에 push ──
+        List<SeatUpdateEvent.SeatState> states = new ArrayList<>();
+        for (Seat s : cafeSeats) {
+            states.add(new SeatUpdateEvent.SeatState(
+                    s.getName(),
+                    s.getStatus(),
+                    s.getAwayTime(),
+                    s.getPersonCount() != null ? s.getPersonCount() : 0
+            ));
+        }
+        sseEmitterService.broadcast(cafeName, new SeatUpdateEvent(cafeName, floorId, states));
     }
 }
