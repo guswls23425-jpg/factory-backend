@@ -130,6 +130,13 @@ public class Ai_db_save {
 
             if (personCount != null) {
                 seat.setPersonCount(Math.max(0, Math.min(4, personCount)));
+            } else {
+                // AI가 personCount를 안 보낼 때: legacyStatus로 최소 인원 추정
+                switch (legacyStatus) {
+                    case "active", "no_drink", "order_check" -> seat.setPersonCount(Math.max(1, seat.getPersonCount() != null ? seat.getPersonCount() : 1));
+                    case "available"                          -> seat.setPersonCount(0);
+                    default -> { /* away/long_away/spill 등은 기존 값 유지 */ }
+                }
             }
             if ("cleaning".equals(mappedStatus)) {
                 seat.setPersonCount(0);
