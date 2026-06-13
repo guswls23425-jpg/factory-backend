@@ -125,34 +125,41 @@ public class Ai_db_save {
             log.info("🪑 [{}] {}번째 좌석(DB id={}) | AI원본={} → DB저장={} | awayTime={}",
                     cafeName, seatIndex + 1, seat.getId(), rawAiStatus, mappedStatus, awayTime);
 
-            // ── 상태 변화 감지 ────────────────────────────────────────────────
-            String prevStatus = seat.getStatus();
-            boolean statusChanged = !mappedStatus.equals(prevStatus);
+            // ── 변화 감지 (status / awayTime / personCount) ───────────────────
+            String  prevStatus      = seat.getStatus();
+            String  prevAwayTime    = seat.getAwayTime() == null ? "" : seat.getAwayTime();
+            boolean statusChanged   = !mappedStatus.equals(prevStatus);
 
-            // ── Seat 테이블 업데이트 (매번 덮어씀 — 현황판 최신화) ──────────────
-            seat.setStatus(mappedStatus);
-            seat.setAwayTime(awayTime);
-
+            // 새 personCount 계산 (DB 저장 전에 결정)
+            int newPersonCount = seat.getPersonCount() != null ? seat.getPersonCount() : 0;
             if (personCount != null) {
-                seat.setPersonCount(Math.max(0, Math.min(4, personCount)));
+                newPersonCount = Math.max(0, Math.min(4, personCount));
             } else {
-                // AI가 personCount를 안 보낼 때: legacyStatus로 최소 인원 추정
                 switch (legacyStatus) {
-                    case "active", "no_drink", "order_check" -> seat.setPersonCount(Math.max(1, seat.getPersonCount() != null ? seat.getPersonCount() : 1));
-                    case "available"                          -> seat.setPersonCount(0);
-                    default -> { /* away/long_away/spill 등은 기존 값 유지 */ }
+                    case "active", "no_drink", "order_check" -> newPersonCount = Math.max(1, newPersonCount);
+                    case "available"                          -> newPersonCount = 0;
+                    default -> { /* 기존 값 유지 */ }
                 }
             }
-            if ("cleaning".equals(mappedStatus)) {
-                seat.setPersonCount(0);
+            if ("cleaning".equals(mappedStatus)) newPersonCount = 0;
+
+            boolean awayTimeChanged   = !awayTime.equals(prevAwayTime);
+            boolean personCountChanged = newPersonCount != (seat.getPersonCount() != null ? seat.getPersonCount() : 0);
+            boolean anyChanged = statusChanged || awayTimeChanged || personCountChanged;
+
+            // ── 변화가 있을 때만 DB 저장 (불필요한 UPDATE 제거) ──────────────────
+            if (anyChanged) {
+                seat.setStatus(mappedStatus);
+                seat.setAwayTime(awayTime);
+                seat.setPersonCount(newPersonCount);
+                seatRepository.save(seat);
+                savedCount++;
+                log.info("✅ [DB 저장] 카페={} | 좌석 {} | {}→{} | awayTime={} | 인원={}",
+                        cafeName, seatIndex + 1, prevStatus, mappedStatus,
+                        awayTime.isBlank() ? "-" : awayTime, newPersonCount);
             }
-            seatRepository.save(seat);
 
-            // ── DB 저장 성공 로그 ─────────────────────────────────────────────
-            log.info("✅ [DB 저장 완료] 카페={} | 좌석 {} (DB id={}) | 상태={} | awayTime={}",
-                    cafeName, seatIndex + 1, seat.getId(), mappedStatus, awayTime.isBlank() ? "-" : awayTime);
-
-            // ── ai_detail_log 이력 기록 (상태가 바뀔 때만 INSERT) ──────────────
+            // ── ai_detail_log 이력 기록 (status 변화 시만) ────────────────────
             if (statusChanged) {
                 changedCount++;
                 log.info("🔔 [상태 변화] 카페={} | 좌석 {} : [{}] → [{}] → 이력 로그 저장",
@@ -173,26 +180,27 @@ public class Ai_db_save {
                     log.error("JSON 직렬화 실패", e);
                 }
                 aiDetailLogRepository.save(logEntity);
-                log.info("📝 [이력 저장 완료] 카페={} | 좌석 {} | AI원본={} → DB={}",
+                log.info("📝 [이력 저장] 카페={} | 좌석 {} | AI원본={} → DB={}",
                         cafeName, seatIndex + 1, rawAiStatus, mappedStatus);
             }
-            savedCount++;
         }
 
         // ── 전체 처리 완료 요약 로그 ──────────────────────────────────────────
-        log.info("🎉 [AI 데이터 처리 완료] 카페={} | 수신={}건 | DB저장={}건 | 상태변화={}건",
+        log.info("🎉 [AI 처리 완료] 카페={} | 수신={}건 | DB저장={}건 | 상태변화={}건",
                 cafeName, dto.getSeats().size(), savedCount, changedCount);
 
-        // ── SSE broadcast: 이번 배치에서 처리된 좌석 상태를 연결된 클라이언트 전체에 push ──
-        List<SeatUpdateEvent.SeatState> states = new ArrayList<>();
-        for (Seat s : cafeSeats) {
-            states.add(new SeatUpdateEvent.SeatState(
-                    s.getName(),
-                    s.getStatus(),
-                    s.getAwayTime(),
-                    s.getPersonCount() != null ? s.getPersonCount() : 0
-            ));
+        // ── SSE broadcast: 변화가 있을 때만 push ──────────────────────────────
+        if (savedCount > 0) {
+            List<SeatUpdateEvent.SeatState> states = new ArrayList<>();
+            for (Seat s : cafeSeats) {
+                states.add(new SeatUpdateEvent.SeatState(
+                        s.getName(),
+                        s.getStatus(),
+                        s.getAwayTime(),
+                        s.getPersonCount() != null ? s.getPersonCount() : 0
+                ));
+            }
+            sseEmitterService.broadcast(cafeName, new SeatUpdateEvent(cafeName, floorId, states));
         }
-        sseEmitterService.broadcast(cafeName, new SeatUpdateEvent(cafeName, floorId, states));
     }
 }
