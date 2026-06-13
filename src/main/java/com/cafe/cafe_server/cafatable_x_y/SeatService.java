@@ -110,12 +110,35 @@ public class SeatService {
             floor.setLabel(label);
             floorRepository.save(floor);
 
-            seatRepository.deleteByCafeIdAndFloorNumber(cafe.getId(), floorNumber);
+            // ── DELETE+INSERT 대신 이름 기준 UPSERT → seat_id 보존, AI 상태 유지 ──
+            List<Long> keptIds = new ArrayList<>();
             if (dto.getSeats() != null) {
                 for (SeatDto seatDto : dto.getSeats()) {
-                    Seat seat = fromDto(seatDto, cafe, floorNumber, label);
-                    seatRepository.save(seat);
+                    Seat seat = seatRepository
+                            .findByCafeIdAndFloorNumberAndName(cafe.getId(), floorNumber, seatDto.getName())
+                            .orElseGet(() -> {
+                                // 신규 좌석만 새로 생성 (status 기본값 "available")
+                                Seat s = new Seat();
+                                s.setCafe(cafe);
+                                s.setStatus("available");
+                                return s;
+                            });
+                    // 위치·이름·층 정보만 덮어씀 — AI가 관리하는 status/awayTime/personCount는 건드리지 않음
+                    seat.setName(seatDto.getName());
+                    seat.setPosX(seatDto.getPosX());
+                    seat.setPosY(seatDto.getPosY());
+                    seat.setFloorNumber(floorNumber);
+                    seat.setFloorName(label);
+                    seat.setCafe(cafe);
+                    Seat saved = seatRepository.save(seat);
+                    keptIds.add(saved.getId());
                 }
+            }
+            // 이번 저장에 포함되지 않은 좌석(삭제된 테이블)만 제거
+            if (!keptIds.isEmpty()) {
+                seatRepository.deleteByIdNotInAndCafeIdAndFloorNumber(keptIds, cafe.getId(), floorNumber);
+            } else {
+                seatRepository.deleteByCafeIdAndFloorNumber(cafe.getId(), floorNumber);
             }
         }
     }

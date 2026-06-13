@@ -7,6 +7,8 @@ import java.util.List;
 public interface SeatRepository extends JpaRepository<Seat, Long> {
     List<Seat> findByCafeId(Long cafeId);
     List<Seat> findByCafeIdAndFloorNumber(Long cafeId, Integer floorNumber);
+    java.util.Optional<Seat> findByCafeIdAndFloorNumberAndName(Long cafeId, Integer floorNumber, String name);
     void deleteByCafeId(Long cafeId);
     void deleteByCafeIdAndFloorNumber(Long cafeId, Integer floorNumber);
+    void deleteByIdNotInAndCafeIdAndFloorNumber(java.util.Collection<Long> ids, Long cafeId, Integer floorNumber);
 }

@@ -84,12 +84,13 @@ public class Ai_db_save {
         }
         Cafe cafe = cafeOpt.get();
 
-        // 해당 카페의 좌석 목록을 seat_id 오름차순으로 정렬 (AI의 1,2,3... 인덱스 기준)
-        List<Seat> cafeSeats = seatRepository.findByCafeId(cafe.getId());
+        // AI가 보낸 floorId 기준으로 해당 층 좌석만 조회 (전체 카페 좌석 조회 시 다층 인덱스 혼용 버그 방지)
+        Integer floorId = dto.getFloorId() != null ? dto.getFloorId().intValue() : 1;
+        List<Seat> cafeSeats = seatRepository.findByCafeIdAndFloorNumber(cafe.getId(), floorId);
         cafeSeats.sort(Comparator.comparing(Seat::getId));
 
-        log.info("📋 카페 [{}] 좌석 수: {}석 | 수신 좌석 업데이트 수: {}",
-                cafeName, cafeSeats.size(), dto.getSeats().size());
+        log.info("📋 카페 [{}] {}층 좌석 수: {}석 | 수신 좌석 업데이트 수: {}",
+                cafeName, floorId, cafeSeats.size(), dto.getSeats().size());
 
         int savedCount   = 0; // 실제 DB 저장된 좌석 수
         int changedCount = 0; // 상태가 변화한 좌석 수
