@@ -32,7 +32,7 @@ public class Ai_db_save {
     private String mapAiStatus(String aiStatus) {
         if (aiStatus == null) return "available";
         return switch (aiStatus.toUpperCase()) {
-            case "OCCUPIED", "TABLE_IN_USE", "ACTIVE"               -> "active";
+            case "OCCUPIED", "TABLE_IN_USE", "ACTIVE", "IN_USE"       -> "active";
             case "AWAY", "TABLE_AWAY", "NO_DRINK",
                  "LONG_AWAY", "ORDER_CHECK", "NON_PURCHASE",
                  "UNPAID_SUSPECTED"                                   -> "away";
