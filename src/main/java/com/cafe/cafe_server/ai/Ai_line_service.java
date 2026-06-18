@@ -2,11 +2,15 @@ package com.cafe.cafe_server.ai;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 
 @Slf4j
 @RestController
@@ -60,12 +64,51 @@ public class Ai_line_service {
     }
 
     /**
-     * 📤 Next.js가 특정 좌석의 AI 통계 데이터를 요청할 때
+     * 📤 특정 좌석의 전체 AI 로그 (기존 호환)
+     *   GET /api/ai/sender?seatId=1
      */
     @GetMapping("/sender")
     public ResponseEntity<?> sendDataToNextJs(@RequestParam("seatId") Long seatId) {
         log.info("💻 Next.js에서 [{}]번 좌석의 AI 로그 요청", seatId);
         List<Ai_table> logs = aiDetailLogRepository.findBySeatIdOrderByCreatedAtDesc(seatId);
-        return ResponseEntity.ok(logs);
+        List<LogResponseDto> result = logs.stream().map(LogResponseDto::new).collect(Collectors.toList());
+        return ResponseEntity.ok(result);
+    }
+
+    /**
+     * 📅 특정 좌석의 날짜별 로그
+     *   GET /api/ai/logs/seat?seatId=1&date=2024-01-15
+     */
+    @GetMapping("/logs/seat")
+    public ResponseEntity<?> getSeatLogsByDate(
+            @RequestParam("seatId") Long seatId,
+            @RequestParam("date") @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date) {
+
+        LocalDateTime from = date.atStartOfDay();
+        LocalDateTime to   = date.plusDays(1).atStartOfDay();
+
+        log.info("📅 좌석 [{}] 날짜별 로그 요청: {}", seatId, date);
+        List<Ai_table> logs = aiDetailLogRepository
+                .findBySeatIdAndCreatedAtBetweenOrderByCreatedAtDesc(seatId, from, to);
+        List<LogResponseDto> result = logs.stream().map(LogResponseDto::new).collect(Collectors.toList());
+        return ResponseEntity.ok(result);
+    }
+
+    /**
+     * 📅 카페 전체 좌석의 날짜별 로그
+     *   GET /api/ai/logs/daily?cafeName=스타벅스강남점&date=2024-01-15
+     */
+    @GetMapping("/logs/daily")
+    public ResponseEntity<?> getDailyLogs(
+            @RequestParam("cafeName") String cafeName,
+            @RequestParam("date") @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date) {
+
+        LocalDateTime from = date.atStartOfDay();
+        LocalDateTime to   = date.plusDays(1).atStartOfDay();
+
+        log.info("📅 카페 [{}] 날짜별 전체 로그 요청: {}", cafeName, date);
+        List<Ai_table> logs = aiDetailLogRepository.findByCafeNameAndDateRange(cafeName, from, to);
+        List<LogResponseDto> result = logs.stream().map(LogResponseDto::new).collect(Collectors.toList());
+        return ResponseEntity.ok(result);
     }
 }
