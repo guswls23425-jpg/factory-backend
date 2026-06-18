@@ -1,6 +1,9 @@
 package com.cafe.cafe_server.cafatable_x_y;
 
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -10,6 +13,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
 
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class SeatService {
@@ -17,6 +21,7 @@ public class SeatService {
     private final CafeRepository  cafeRepository;
     private final SeatRepository  seatRepository;
     private final FloorRepository floorRepository;
+    private final ObjectMapper     objectMapper;
 
     // ── 카페 조회 or 생성 ─────────────────────────────────────────────────────
     private Cafe getOrCreateCafe(String cafeName) {
@@ -123,13 +128,26 @@ public class SeatService {
                                 s.setStatus("available");
                                 return s;
                             });
-                    // 위치·이름·층 정보만 덮어씀 — AI가 관리하는 status/awayTime/personCount는 건드리지 않음
+                    // 위치·이름·층·레이아웃 정보 덮어씀 — AI가 관리하는 status/awayTime/personCount는 건드리지 않음
                     seat.setName(seatDto.getName());
                     seat.setPosX(seatDto.getPosX());
                     seat.setPosY(seatDto.getPosY());
                     seat.setFloorNumber(floorNumber);
                     seat.setFloorName(label);
                     seat.setCafe(cafe);
+                    // 레이아웃 필드
+                    if (seatDto.getShape()       != null) seat.setShape(seatDto.getShape());
+                    if (seatDto.getTableWidth()  != null) seat.setTableWidth(seatDto.getTableWidth());
+                    if (seatDto.getTableHeight() != null) seat.setTableHeight(seatDto.getTableHeight());
+                    if (seatDto.getCapacity()    != null) seat.setCapacity(seatDto.getCapacity());
+                    if (seatDto.getRotation()    != null) seat.setRotation(seatDto.getRotation());
+                    if (seatDto.getChairAngles() != null) {
+                        try {
+                            seat.setChairAngles(objectMapper.writeValueAsString(seatDto.getChairAngles()));
+                        } catch (Exception e) {
+                            log.warn("chairAngles 직렬화 실패: {}", e.getMessage());
+                        }
+                    }
                     Seat saved = seatRepository.save(seat);
                     keptIds.add(saved.getId());
                 }
@@ -210,6 +228,19 @@ public class SeatService {
         int fn = resolveFloorNumber(seat);
         dto.setFloorNumber(fn);
         dto.setFloorName(seat.getFloorName() != null ? seat.getFloorName() : fn + "층");
+        // 레이아웃 필드
+        dto.setShape(seat.getShape());
+        dto.setTableWidth(seat.getTableWidth());
+        dto.setTableHeight(seat.getTableHeight());
+        dto.setCapacity(seat.getCapacity());
+        dto.setRotation(seat.getRotation());
+        if (seat.getChairAngles() != null && !seat.getChairAngles().isBlank()) {
+            try {
+                dto.setChairAngles(objectMapper.readValue(seat.getChairAngles(), new TypeReference<List<Double>>() {}));
+            } catch (Exception e) {
+                log.warn("chairAngles 파싱 실패 (seat={}): {}", seat.getId(), e.getMessage());
+            }
+        }
         return dto;
     }
 

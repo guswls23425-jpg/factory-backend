@@ -38,6 +38,25 @@ public class Seat {
     @Column(name = "floor_name", columnDefinition = "VARCHAR(50) DEFAULT '1층'")
     private String floorName = "1층";
 
+    // ── 테이블 레이아웃 (관리자 편집) ─────────────────────────────────────────
+    @Column(name = "shape")
+    private String shape;                       // rect | rounded | circle
+
+    @Column(name = "table_width")
+    private Integer tableWidth;
+
+    @Column(name = "table_height")
+    private Integer tableHeight;
+
+    @Column(name = "capacity")
+    private Integer capacity;                   // 의자 수 (1~8)
+
+    @Column(name = "rotation")
+    private Integer rotation;                   // 회전 각도 (0~359)
+
+    @Column(name = "chair_angles", columnDefinition = "TEXT")
+    private String chairAngles;                 // JSON 배열 문자열 "[1.57, 3.14, ...]"
+
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "cafe_id")
     private Cafe cafe;
