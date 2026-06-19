@@ -26,6 +26,9 @@ public class KakaoAuthService {
     @Value("${kakao.rest-api-key}")
     private String restApiKey;
 
+    @Value("${kakao.client-secret}")
+    private String clientSecret;
+
     @Value("${kakao.redirect-uri}")
     private String redirectUri;
 
@@ -80,6 +83,7 @@ public class KakaoAuthService {
         MultiValueMap<String, String> params = new LinkedMultiValueMap<>();
         params.add("grant_type", grantType);
         params.add("client_id", restApiKey);
+        params.add("client_secret", clientSecret);
         params.add("redirect_uri", redirectUri);
         if (code != null)         params.add("code", code);
         if (refreshToken != null) params.add("refresh_token", refreshToken);

@@ -22,5 +22,6 @@ spring:
 
 kakao:
   rest-api-key: 4237d5d50ad473790cfcb04a8f17608e
+  client-secret: AXyKoe9feMZDJsdXoAvceFU9ItP1OOQ8
   redirect-uri: http://34.64.58.23:8080/api/kakao/callback
   frontend-url: http://34.64.58.23:3000/dashboard/seat-management
