@@ -19,3 +19,8 @@ spring:
   mvc:
     async:
       request-timeout: -1
+
+kakao:
+  rest-api-key: 4237d5d50ad473790cfcb04a8f17608e
+  redirect-uri: http://34.64.58.23:8080/api/auth/kakao/callback
+  frontend-url: http://34.64.58.23:3000/dashboard/seat-management
