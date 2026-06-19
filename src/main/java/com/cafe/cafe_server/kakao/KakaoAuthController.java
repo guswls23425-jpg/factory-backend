@@ -14,7 +14,7 @@ import java.util.Map;
 
 @Slf4j
 @RestController
-@RequestMapping("/api/auth/kakao")
+@RequestMapping("/api/kakao")
 @RequiredArgsConstructor
 public class KakaoAuthController {
 
