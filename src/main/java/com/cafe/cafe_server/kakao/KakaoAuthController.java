@@ -34,14 +34,13 @@ public class KakaoAuthController {
     @GetMapping("/login-url")
     public ResponseEntity<Map<String, String>> getLoginUrl(@RequestParam String cafeName) {
         // state에 cafeName을 Base64로 담아 콜백에서 복원
-        String state = Base64.getUrlEncoder().encodeToString(
+        String state = Base64.getUrlEncoder().withoutPadding().encodeToString(
                 cafeName.getBytes(StandardCharsets.UTF_8));
 
         String url = "https://kauth.kakao.com/oauth/authorize"
                 + "?client_id=" + restApiKey
                 + "&redirect_uri=" + URLEncoder.encode(redirectUri, StandardCharsets.UTF_8)
                 + "&response_type=code"
-                + "&scope=talk_message"
                 + "&state=" + state;
 
         return ResponseEntity.ok(Map.of("url", url));

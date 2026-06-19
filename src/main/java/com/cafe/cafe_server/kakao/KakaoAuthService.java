@@ -8,6 +8,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.LinkedMultiValueMap;
 import org.springframework.util.MultiValueMap;
+import org.springframework.web.client.HttpClientErrorException;
 import org.springframework.web.client.RestTemplate;
 
 import java.time.LocalDateTime;
@@ -83,17 +84,22 @@ public class KakaoAuthService {
         if (code != null)         params.add("code", code);
         if (refreshToken != null) params.add("refresh_token", refreshToken);
 
-        ResponseEntity<Map> res = restTemplate.exchange(
-                "https://kauth.kakao.com/oauth/token",
-                HttpMethod.POST,
-                new HttpEntity<>(params, headers),
-                Map.class
-        );
-
-        if (!res.getStatusCode().is2xxSuccessful() || res.getBody() == null) {
-            throw new RuntimeException("카카오 토큰 API 오류: " + res.getStatusCode());
+        try {
+            ResponseEntity<Map> res = restTemplate.exchange(
+                    "https://kauth.kakao.com/oauth/token",
+                    HttpMethod.POST,
+                    new HttpEntity<>(params, headers),
+                    Map.class
+            );
+            if (!res.getStatusCode().is2xxSuccessful() || res.getBody() == null) {
+                throw new RuntimeException("카카오 토큰 API 오류: " + res.getStatusCode());
+            }
+            return res.getBody();
+        } catch (HttpClientErrorException e) {
+            log.error("카카오 토큰 API 오류 상세 — status={} body={} requestParams={}",
+                    e.getStatusCode(), e.getResponseBodyAsString(), params);
+            throw new RuntimeException("카카오 토큰 API 오류: " + e.getStatusCode() + " " + e.getResponseBodyAsString());
         }
-        return res.getBody();
     }
 
     // ── 토큰 응답 → DB 저장/업데이트 ────────────────────────────────────────────
