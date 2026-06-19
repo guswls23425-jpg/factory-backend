@@ -8,7 +8,26 @@ import java.util.List;
 @Getter
 @Setter
 public class FloorDto {
-    private Integer floorNumber; // 1, 2, 3 ...
-    private String label;        // "1층", "2층" ...
+    private Integer floorNumber;
+    private String label;
     private List<SeatDto> seats;
+    private List<RestroomMarkerDto> restrooms;
+    private List<WindowMarkerDto>   windows;
+
+    @Getter @Setter
+    public static class RestroomMarkerDto {
+        private Integer id;
+        private String  type;  // "male" | "female" | "both"
+        private Integer posX;
+        private Integer posY;
+    }
+
+    @Getter @Setter
+    public static class WindowMarkerDto {
+        private Integer id;
+        private Integer posX;
+        private Integer posY;
+        private Double  angle;
+        private Integer length;
+    }
 }

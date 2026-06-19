@@ -21,6 +21,12 @@ public class Floor {
     @Column(name = "label", nullable = false)
     private String label; // "1층", "2층" ...
 
+    @Column(name = "restrooms", columnDefinition = "TEXT")
+    private String restrooms; // JSON 배열: [{id,type,posX,posY}, ...]
+
+    @Column(name = "windows", columnDefinition = "TEXT")
+    private String windows;   // JSON 배열: [{id,posX,posY,angle,length}, ...]
+
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "cafe_id", nullable = false)
     private Cafe cafe;

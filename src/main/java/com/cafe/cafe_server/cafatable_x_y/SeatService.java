@@ -1,5 +1,7 @@
 package com.cafe.cafe_server.cafatable_x_y;
 
+import com.cafe.cafe_server.cafatable_x_y.FloorDto.RestroomMarkerDto;
+import com.cafe.cafe_server.cafatable_x_y.FloorDto.WindowMarkerDto;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
@@ -75,6 +77,24 @@ public class SeatService {
                     .findByCafeIdAndFloorNumber(cafe.getId(), floor.getFloorNumber())
                     .stream().map(this::toDto).collect(Collectors.toList());
             fd.setSeats(seats);
+            // 화장실 마커
+            if (floor.getRestrooms() != null && !floor.getRestrooms().isBlank()) {
+                try {
+                    fd.setRestrooms(objectMapper.readValue(floor.getRestrooms(),
+                            new TypeReference<List<RestroomMarkerDto>>() {}));
+                } catch (Exception e) {
+                    log.warn("restrooms 파싱 실패 (floor={}): {}", floor.getId(), e.getMessage());
+                }
+            }
+            // 창문 마커
+            if (floor.getWindows() != null && !floor.getWindows().isBlank()) {
+                try {
+                    fd.setWindows(objectMapper.readValue(floor.getWindows(),
+                            new TypeReference<List<WindowMarkerDto>>() {}));
+                } catch (Exception e) {
+                    log.warn("windows 파싱 실패 (floor={}): {}", floor.getId(), e.getMessage());
+                }
+            }
             return fd;
         }).collect(Collectors.toList());
     }
@@ -113,6 +133,15 @@ public class SeatService {
                         return f;
                     });
             floor.setLabel(label);
+            // 화장실·창문 마커 저장
+            try {
+                floor.setRestrooms(dto.getRestrooms() != null
+                        ? objectMapper.writeValueAsString(dto.getRestrooms()) : null);
+                floor.setWindows(dto.getWindows() != null
+                        ? objectMapper.writeValueAsString(dto.getWindows()) : null);
+            } catch (Exception e) {
+                log.warn("overlay 직렬화 실패: {}", e.getMessage());
+            }
             floorRepository.save(floor);
 
             // ── DELETE+INSERT 대신 이름 기준 UPSERT → seat_id 보존, AI 상태 유지 ──
