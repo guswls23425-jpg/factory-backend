@@ -78,10 +78,16 @@ public class KakaoAuthController {
     }
 
     // ── 연결 상태 조회 ────────────────────────────────────────────────────────────
-    // GET /api/auth/kakao/status?cafeName=xxx
     @GetMapping("/status")
     public ResponseEntity<Map<String, Object>> getStatus(@RequestParam String cafeName) {
         boolean connected = kakaoAuthService.isConnected(cafeName);
         return ResponseEntity.ok(Map.of("connected", connected));
+    }
+
+    // ── 연동 해제 ─────────────────────────────────────────────────────────────────
+    @DeleteMapping("/disconnect")
+    public ResponseEntity<Void> disconnect(@RequestParam String cafeName) {
+        kakaoAuthService.disconnect(cafeName);
+        return ResponseEntity.noContent().build();
     }
 }

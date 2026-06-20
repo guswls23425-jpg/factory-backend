@@ -74,6 +74,12 @@ public class KakaoAuthService {
         return tokenRepository.findByCafeName(cafeName);
     }
 
+    @Transactional
+    public void disconnect(String cafeName) {
+        tokenRepository.findByCafeName(cafeName).ifPresent(tokenRepository::delete);
+        log.info("카카오 연동 해제 (cafe={})", cafeName);
+    }
+
     // ── 카카오 token API 호출 공통 ────────────────────────────────────────────
     @SuppressWarnings("unchecked")
     private Map<String, Object> requestToken(String grantType, String code, String refreshToken) {
