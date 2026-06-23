@@ -17,6 +17,7 @@ import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.util.*;
 import java.util.stream.Collectors;
+import java.util.TreeMap;
 
 @RestController
 @RequestMapping("/api/analytics")
@@ -144,6 +145,49 @@ public class AnalyticsController {
             result.add(item);
         }
         result.sort((a, b) -> Double.compare((Double) b.get("value"), (Double) a.get("value")));
+        return ResponseEntity.ok(result);
+    }
+
+    // 날짜별 층별 점유율 요약
+    @GetMapping("/floor-summary")
+    public ResponseEntity<List<Map<String, Object>>> floorSummary(
+            @RequestParam String cafeName,
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date) {
+
+        var cafeOpt = cafeRepository.findByName(cafeName);
+        if (cafeOpt.isEmpty()) return ResponseEntity.notFound().build();
+
+        Long cafeId = cafeOpt.get().getId();
+        LocalDateTime from = date.atStartOfDay();
+        LocalDateTime to   = date.atTime(LocalTime.MAX);
+        List<Ai_table> logs = aiLogRepository.findByCafeNameAndDateRange(cafeName, from, to);
+        Map<Long, List<Ai_table>> logsBySeat = logs.stream()
+                .collect(Collectors.groupingBy(l -> l.getSeat().getId()));
+
+        // 등록된 모든 층 번호 수집
+        List<Seat> allSeats = seatRepository.findByCafeId(cafeId);
+        Map<Integer, String> floorNames = new LinkedHashMap<>();
+        allSeats.forEach(s -> floorNames.putIfAbsent(s.getFloorNumber(), s.getFloorName()));
+
+        List<Map<String, Object>> result = new ArrayList<>();
+        for (Map.Entry<Integer, String> fl : new TreeMap<>(floorNames).entrySet()) {
+            List<Seat> floorSeats = allSeats.stream()
+                    .filter(s -> fl.getKey().equals(s.getFloorNumber()))
+                    .toList();
+            long totalActive = 0, totalLogs = 0;
+            for (Seat seat : floorSeats) {
+                List<Ai_table> sl = logsBySeat.getOrDefault(seat.getId(), List.of());
+                totalLogs  += sl.size();
+                totalActive += sl.stream().filter(l -> "active".equals(l.getStatus())).count();
+            }
+            double occ = totalLogs == 0 ? 0 : Math.round(totalActive * 1000.0 / totalLogs) / 10.0;
+            Map<String, Object> item = new LinkedHashMap<>();
+            item.put("floorNumber", fl.getKey());
+            item.put("floorName",   fl.getValue());
+            item.put("occupancy",   occ);
+            item.put("seatCount",   floorSeats.size());
+            result.add(item);
+        }
         return ResponseEntity.ok(result);
     }
 
