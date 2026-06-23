@@ -25,3 +25,8 @@ kakao:
   client-secret: AXyKoe9feMZDJsdXoAvceFU9ItP1OOQ8
   redirect-uri: http://34.64.58.23:8080/api/kakao/callback
   frontend-url: http://localhost:3000/dashboard/system-settings
+
+weather:
+  api-key: 42411751ff40b6ec545dd37e1ce13dba
+  city: Changwon
+  country: KR
