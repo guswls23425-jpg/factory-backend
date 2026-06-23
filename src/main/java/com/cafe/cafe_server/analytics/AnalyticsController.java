@@ -191,6 +191,53 @@ public class AnalyticsController {
         return ResponseEntity.ok(result);
     }
 
+    // 날씨-점유율 관계 데이터 (산점도용)
+    @GetMapping("/weather-relation")
+    public ResponseEntity<List<Map<String, Object>>> weatherRelation(
+            @RequestParam String cafeName,
+            @RequestParam(defaultValue = "60") int days) {
+
+        LocalDate to   = LocalDate.now();
+        LocalDate from = to.minusDays(days - 1);
+
+        Map<String, String> normalize = new HashMap<>();
+        normalize.put("Clear","맑음"); normalize.put("Clouds","흐림");
+        normalize.put("Rain","비"); normalize.put("Drizzle","비"); normalize.put("Thunderstorm","비"); normalize.put("Squall","비"); normalize.put("Tornado","비");
+        normalize.put("Snow","눈");
+        normalize.put("Dust","황사"); normalize.put("Sand","황사"); normalize.put("Haze","황사");
+        normalize.put("Mist","흐림"); normalize.put("Fog","흐림"); normalize.put("Smoke","흐림"); normalize.put("Ash","흐림");
+
+        Map<String, String> colorMap = new HashMap<>();
+        colorMap.put("맑음","#f59e0b"); colorMap.put("흐림","#94a3b8");
+        colorMap.put("비","#3b82f6"); colorMap.put("눈","#bae6fd"); colorMap.put("황사","#d97706");
+
+        List<Map<String, Object>> result = new ArrayList<>();
+        for (LocalDate d = from; !d.isAfter(to); d = d.plusDays(1)) {
+            List<Ai_table> logs = aiLogRepository.findByCafeNameAndDateRange(
+                    cafeName, d.atStartOfDay(), d.atTime(LocalTime.MAX));
+            if (logs.isEmpty()) continue;
+
+            Optional<WeatherLog> noonOpt = weatherLogRepository.findByLogDateAndLogHour(d, 12);
+            Optional<WeatherLog> anyOpt  = weatherLogRepository.findTopByLogDateOrderByLogHourAsc(d);
+            WeatherLog wl = noonOpt.orElse(anyOpt.orElse(null));
+            if (wl == null || wl.getTemp() == null) continue;
+
+            long active = logs.stream().filter(l -> "active".equals(l.getStatus())).count();
+            double occ  = Math.round(active * 1000.0 / logs.size()) / 10.0;
+            String label = normalize.getOrDefault(wl.getWeatherMain(), "흐림");
+
+            Map<String, Object> item = new LinkedHashMap<>();
+            item.put("date",      d.toString());
+            item.put("temp",      Math.round(wl.getTemp() * 10) / 10.0);
+            item.put("occupancy", occ);
+            item.put("weather",   label);
+            item.put("color",     colorMap.getOrDefault(label, "#6b7280"));
+            item.put("humidity",  wl.getHumidity());
+            result.add(item);
+        }
+        return ResponseEntity.ok(result);
+    }
+
     // 날짜별 이용률 추이 (최근 N일)
     @GetMapping("/daily-trend")
     public ResponseEntity<List<Map<String, Object>>> dailyTrend(
