@@ -146,4 +146,99 @@ public class AnalyticsController {
         result.sort((a, b) -> Double.compare((Double) b.get("value"), (Double) a.get("value")));
         return ResponseEntity.ok(result);
     }
+
+    // 날짜별 이용률 추이 (최근 N일)
+    @GetMapping("/daily-trend")
+    public ResponseEntity<List<Map<String, Object>>> dailyTrend(
+            @RequestParam String cafeName,
+            @RequestParam(defaultValue = "30") int days) {
+
+        LocalDate to = LocalDate.now();
+        LocalDate from = to.minusDays(days - 1);
+        List<Map<String, Object>> result = new ArrayList<>();
+
+        for (LocalDate d = from; !d.isAfter(to); d = d.plusDays(1)) {
+            List<Ai_table> logs = aiLogRepository.findByCafeNameAndDateRange(
+                    cafeName, d.atStartOfDay(), d.atTime(LocalTime.MAX));
+            long active = logs.stream().filter(l -> "active".equals(l.getStatus())).count();
+            double occ = logs.isEmpty() ? 0 : Math.round(active * 1000.0 / logs.size()) / 10.0;
+            Map<String, Object> item = new LinkedHashMap<>();
+            item.put("date", d.toString());
+            item.put("occupancy", occ);
+            result.add(item);
+        }
+        return ResponseEntity.ok(result);
+    }
+
+    // 요일별 평균 점유율
+    @GetMapping("/weekday-occupancy")
+    public ResponseEntity<List<Map<String, Object>>> weekdayOccupancy(
+            @RequestParam String cafeName,
+            @RequestParam(defaultValue = "90") int days) {
+
+        LocalDate to = LocalDate.now();
+        LocalDate from = to.minusDays(days - 1);
+
+        String[] labels = {"월", "화", "수", "목", "금", "토", "일"};
+        Map<Integer, List<Double>> byDow = new LinkedHashMap<>();
+        for (int i = 1; i <= 7; i++) byDow.put(i, new ArrayList<>());
+
+        for (LocalDate d = from; !d.isAfter(to); d = d.plusDays(1)) {
+            List<Ai_table> logs = aiLogRepository.findByCafeNameAndDateRange(
+                    cafeName, d.atStartOfDay(), d.atTime(LocalTime.MAX));
+            if (logs.isEmpty()) continue;
+            long active = logs.stream().filter(l -> "active".equals(l.getStatus())).count();
+            int dow = d.getDayOfWeek().getValue(); // 1=월 ~ 7=일
+            byDow.get(dow).add(active * 100.0 / logs.size());
+        }
+
+        List<Map<String, Object>> result = new ArrayList<>();
+        for (int i = 1; i <= 7; i++) {
+            List<Double> vals = byDow.get(i);
+            double avg = vals.isEmpty() ? 0 : Math.round(vals.stream().mapToDouble(Double::doubleValue).average().orElse(0) * 10) / 10.0;
+            Map<String, Object> item = new LinkedHashMap<>();
+            item.put("day", labels[i - 1]);
+            item.put("occupancy", avg);
+            result.add(item);
+        }
+        return ResponseEntity.ok(result);
+    }
+
+    // 시간대별 평균 점유율
+    @GetMapping("/hourly-occupancy")
+    public ResponseEntity<List<Map<String, Object>>> hourlyOccupancy(
+            @RequestParam String cafeName,
+            @RequestParam(defaultValue = "30") int days) {
+
+        LocalDate to = LocalDate.now();
+        LocalDate from = to.minusDays(days - 1);
+
+        Map<Integer, List<Double>> byHour = new LinkedHashMap<>();
+        for (int h = 0; h < 24; h++) byHour.put(h, new ArrayList<>());
+
+        List<Ai_table> logs = aiLogRepository.findByCafeNameAndDateRange(
+                cafeName, from.atStartOfDay(), to.atTime(LocalTime.MAX));
+
+        // 시간대별로 그룹핑
+        Map<Integer, Long> activeByHour = new LinkedHashMap<>();
+        Map<Integer, Long> totalByHour  = new LinkedHashMap<>();
+        for (int h = 0; h < 24; h++) { activeByHour.put(h, 0L); totalByHour.put(h, 0L); }
+
+        for (Ai_table log : logs) {
+            int h = log.getCreatedAt().getHour();
+            totalByHour.merge(h, 1L, Long::sum);
+            if ("active".equals(log.getStatus())) activeByHour.merge(h, 1L, Long::sum);
+        }
+
+        List<Map<String, Object>> result = new ArrayList<>();
+        for (int h = 0; h < 24; h++) {
+            long total = totalByHour.get(h);
+            double occ = total == 0 ? 0 : Math.round(activeByHour.get(h) * 1000.0 / total) / 10.0;
+            Map<String, Object> item = new LinkedHashMap<>();
+            item.put("hour", h + "시");
+            item.put("occupancy", occ);
+            result.add(item);
+        }
+        return ResponseEntity.ok(result);
+    }
 }
