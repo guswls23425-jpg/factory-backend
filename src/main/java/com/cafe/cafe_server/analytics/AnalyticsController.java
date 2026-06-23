@@ -106,14 +106,40 @@ public class AnalyticsController {
             byWeather.computeIfAbsent(key, k -> new ArrayList<>()).add(e.getValue());
         }
 
-        Map<String, String> labelMap = Map.of(
-                "Clear", "맑음", "Clouds", "흐림", "Rain", "비",
-                "Drizzle", "이슬비", "Snow", "눈", "Thunderstorm", "천둥번개",
-                "Mist", "안개", "Fog", "안개", "Haze", "연무", "Dust", "황사");
-        Map<String, String> colorMap = Map.of(
-                "Clear", "#f59e0b", "Clouds", "#94a3b8", "Rain", "#3b82f6",
-                "Drizzle", "#60a5fa", "Snow", "#bae6fd", "Thunderstorm", "#7c3aed",
-                "Mist", "#cbd5e1", "Fog", "#cbd5e1", "Haze", "#d1d5db", "Dust", "#d97706");
+        // OpenWeatherMap 전체 weatherMain 카테고리
+        Map<String, String> labelMap = new HashMap<>();
+        labelMap.put("Clear",        "맑음");
+        labelMap.put("Clouds",       "흐림");
+        labelMap.put("Rain",         "비");
+        labelMap.put("Drizzle",      "이슬비");
+        labelMap.put("Thunderstorm", "천둥번개");
+        labelMap.put("Snow",         "눈");
+        labelMap.put("Mist",         "안개");
+        labelMap.put("Fog",          "짙은 안개");
+        labelMap.put("Haze",         "연무");
+        labelMap.put("Smoke",        "연기");
+        labelMap.put("Dust",         "황사");
+        labelMap.put("Sand",         "모래바람");
+        labelMap.put("Ash",          "화산재");
+        labelMap.put("Squall",       "돌풍");
+        labelMap.put("Tornado",      "토네이도");
+
+        Map<String, String> colorMap = new HashMap<>();
+        colorMap.put("Clear",        "#f59e0b");  // 노랑 (햇살)
+        colorMap.put("Clouds",       "#94a3b8");  // 회색
+        colorMap.put("Rain",         "#3b82f6");  // 파랑
+        colorMap.put("Drizzle",      "#93c5fd");  // 연파랑
+        colorMap.put("Thunderstorm", "#7c3aed");  // 보라
+        colorMap.put("Snow",         "#bae6fd");  // 하늘색
+        colorMap.put("Mist",         "#cbd5e1");  // 연회색
+        colorMap.put("Fog",          "#9ca3af");  // 중간 회색
+        colorMap.put("Haze",         "#d1d5db");  // 밝은 회색
+        colorMap.put("Smoke",        "#6b7280");  // 어두운 회색
+        colorMap.put("Dust",         "#d97706");  // 황토색
+        colorMap.put("Sand",         "#b45309");  // 갈색
+        colorMap.put("Ash",          "#78716c");  // 재색
+        colorMap.put("Squall",       "#0ea5e9");  // 하늘청
+        colorMap.put("Tornado",      "#dc2626");  // 빨강
 
         List<Map<String, Object>> result = new ArrayList<>();
         for (Map.Entry<String, List<Double>> e : byWeather.entrySet()) {
