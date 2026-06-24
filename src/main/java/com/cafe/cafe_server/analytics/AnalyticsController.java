@@ -224,7 +224,8 @@ public class AnalyticsController {
             List<Long> sessionMinutes = new ArrayList<>();
             LocalDateTime sessionStart = null;
             LocalDateTime lastActiveEnd = null;
-            final long MERGE_SECONDS = 5 * 60;
+            final long MERGE_SECONDS   = 5 * 60;
+            final long MAX_SECONDS     = 6 * 60 * 60; // 6시간 상한
 
             for (Ai_table log : logs) {
                 String s = log.getStatus();
@@ -234,9 +235,8 @@ public class AnalyticsController {
                     } else if (lastActiveEnd != null) {
                         long gap = java.time.Duration.between(lastActiveEnd, log.getCreatedAt()).getSeconds();
                         if (gap > MERGE_SECONDS) {
-                            // 새 세션
                             long min = java.time.Duration.between(sessionStart, lastActiveEnd).toMinutes();
-                            if (min > 0) sessionMinutes.add(min);
+                            if (min > 0 && min <= MAX_SECONDS / 60) sessionMinutes.add(min);
                             sessionStart = log.getCreatedAt();
                         }
                     }
@@ -250,7 +250,7 @@ public class AnalyticsController {
             // 마지막 세션 처리
             if (sessionStart != null && lastActiveEnd != null) {
                 long min = java.time.Duration.between(sessionStart, lastActiveEnd).toMinutes();
-                if (min > 0) sessionMinutes.add(min);
+                if (min > 0 && min <= MAX_SECONDS / 60) sessionMinutes.add(min);
             }
 
             if (sessionMinutes.isEmpty()) continue;
