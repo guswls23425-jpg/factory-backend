@@ -30,7 +30,37 @@ public class AnalyticsController {
     private final CafeRepository cafeRepository;
     private final WeatherLogRepository weatherLogRepository;
 
-    // 날짜별 좌석 점유율 + 위치 정보
+    // 시간 기반 점유율 계산 (active 시간 / 24시간 × 100)
+    private double calcTimeOccupancy(List<Ai_table> logs, LocalDate date) {
+        if (logs.isEmpty()) return 0.0;
+        List<Ai_table> sorted = logs.stream()
+                .sorted(Comparator.comparing(Ai_table::getCreatedAt)).toList();
+
+        long activeSeconds = 0;
+        LocalDateTime dayStart = date.atStartOfDay();
+        LocalDateTime dayEnd   = date.atTime(LocalTime.MAX);
+        LocalDateTime activeStart = null;
+
+        for (Ai_table log : sorted) {
+            if ("active".equals(log.getStatus())) {
+                if (activeStart == null) activeStart = log.getCreatedAt();
+            } else {
+                if (activeStart != null) {
+                    activeSeconds += java.time.Duration.between(activeStart, log.getCreatedAt()).getSeconds();
+                    activeStart = null;
+                }
+            }
+        }
+        // 마지막 active가 종료 로그 없이 하루 끝난 경우
+        if (activeStart != null) {
+            activeSeconds += java.time.Duration.between(activeStart, dayEnd).getSeconds();
+        }
+
+        long daySeconds = java.time.Duration.between(dayStart, dayEnd).getSeconds();
+        return Math.round(activeSeconds * 1000.0 / daySeconds) / 10.0;
+    }
+
+    // 날짜별 좌석 점유율 + 위치 정보 (시간 기반)
     @GetMapping("/daily-occupancy")
     public ResponseEntity<List<Map<String, Object>>> dailyOccupancy(
             @RequestParam String cafeName,
@@ -44,34 +74,28 @@ public class AnalyticsController {
         List<Seat> seats = seatRepository.findByCafeIdAndFloorNumber(cafeId, floorId);
 
         LocalDateTime from = date.atStartOfDay();
-        LocalDateTime to = date.atTime(LocalTime.MAX);
+        LocalDateTime to   = date.atTime(LocalTime.MAX);
         List<Ai_table> logs = aiLogRepository.findByCafeNameAndDateRange(cafeName, from, to);
 
-        // seatId별로 로그 그룹화
         Map<Long, List<Ai_table>> logsBySeat = logs.stream()
                 .collect(Collectors.groupingBy(l -> l.getSeat().getId()));
 
         List<Map<String, Object>> result = new ArrayList<>();
         for (Seat seat : seats) {
             List<Ai_table> seatLogs = logsBySeat.getOrDefault(seat.getId(), List.of());
-            long activeCount = seatLogs.stream()
-                    .filter(l -> "active".equals(l.getStatus()))
-                    .count();
-            long total = seatLogs.size();
-            double occupancy = total == 0 ? 0.0 : Math.round((activeCount * 100.0 / total) * 10) / 10.0;
+            double occupancy = calcTimeOccupancy(seatLogs, date);
 
             Map<String, Object> item = new LinkedHashMap<>();
-            item.put("seatId", seat.getId());
-            item.put("name", seat.getName());
-            item.put("posX", seat.getPosX());
-            item.put("posY", seat.getPosY());
-            item.put("tableWidth", seat.getTableWidth());
+            item.put("seatId",      seat.getId());
+            item.put("name",        seat.getName());
+            item.put("posX",        seat.getPosX());
+            item.put("posY",        seat.getPosY());
+            item.put("tableWidth",  seat.getTableWidth());
             item.put("tableHeight", seat.getTableHeight());
-            item.put("shape", seat.getShape());
-            item.put("rotation", seat.getRotation());
-            item.put("occupancy", occupancy);
-            item.put("activeCount", activeCount);
-            item.put("totalCount", total);
+            item.put("shape",       seat.getShape());
+            item.put("rotation",    seat.getRotation());
+            item.put("occupancy",   occupancy);
+            item.put("totalCount",  seatLogs.size());
             result.add(item);
         }
         return ResponseEntity.ok(result);
@@ -169,23 +193,45 @@ public class AnalyticsController {
         Map<Integer, String> floorNames = new LinkedHashMap<>();
         allSeats.forEach(s -> floorNames.putIfAbsent(s.getFloorNumber(), s.getFloorName()));
 
-        List<Map<String, Object>> result = new ArrayList<>();
+        // 층별 active 총 시간(초) 계산
+        Map<Integer, Long> floorActiveSeconds = new LinkedHashMap<>();
+        Map<Integer, Integer> floorSeatCount  = new LinkedHashMap<>();
         for (Map.Entry<Integer, String> fl : new TreeMap<>(floorNames).entrySet()) {
             List<Seat> floorSeats = allSeats.stream()
-                    .filter(s -> fl.getKey().equals(s.getFloorNumber()))
-                    .toList();
-            long totalActive = 0, totalLogs = 0;
+                    .filter(s -> fl.getKey().equals(s.getFloorNumber())).toList();
+            long seconds = 0;
             for (Seat seat : floorSeats) {
-                List<Ai_table> sl = logsBySeat.getOrDefault(seat.getId(), List.of());
-                totalLogs  += sl.size();
-                totalActive += sl.stream().filter(l -> "active".equals(l.getStatus())).count();
+                List<Ai_table> sl = logsBySeat.getOrDefault(seat.getId(), List.of())
+                        .stream().sorted(Comparator.comparing(Ai_table::getCreatedAt)).toList();
+                LocalDateTime activeStart = null;
+                for (Ai_table log : sl) {
+                    if ("active".equals(log.getStatus())) {
+                        if (activeStart == null) activeStart = log.getCreatedAt();
+                    } else if (activeStart != null) {
+                        seconds += java.time.Duration.between(activeStart, log.getCreatedAt()).getSeconds();
+                        activeStart = null;
+                    }
+                }
+                if (activeStart != null)
+                    seconds += java.time.Duration.between(activeStart, to).getSeconds();
             }
-            double occ = totalLogs == 0 ? 0 : Math.round(totalActive * 1000.0 / totalLogs) / 10.0;
+            floorActiveSeconds.put(fl.getKey(), seconds);
+            floorSeatCount.put(fl.getKey(), floorSeats.size());
+        }
+
+        // 전체 active 시간 합계
+        long totalSeconds = floorActiveSeconds.values().stream().mapToLong(Long::longValue).sum();
+
+        List<Map<String, Object>> result = new ArrayList<>();
+        for (Map.Entry<Integer, String> fl : new TreeMap<>(floorNames).entrySet()) {
+            long sec = floorActiveSeconds.getOrDefault(fl.getKey(), 0L);
+            // 비율 = 이 층의 active 시간 / 전체 active 시간 × 100 (합계 100%)
+            double share = totalSeconds == 0 ? 0 : Math.round(sec * 1000.0 / totalSeconds) / 10.0;
             Map<String, Object> item = new LinkedHashMap<>();
             item.put("floorNumber", fl.getKey());
             item.put("floorName",   fl.getValue());
-            item.put("occupancy",   occ);
-            item.put("seatCount",   floorSeats.size());
+            item.put("occupancy",   share);
+            item.put("seatCount",   floorSeatCount.getOrDefault(fl.getKey(), 0));
             result.add(item);
         }
         return ResponseEntity.ok(result);
