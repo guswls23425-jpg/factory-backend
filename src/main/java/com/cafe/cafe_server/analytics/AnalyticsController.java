@@ -191,6 +191,84 @@ public class AnalyticsController {
         return ResponseEntity.ok(result);
     }
 
+    // 테이블별 평균 체류 시간
+    @GetMapping("/stay-duration")
+    public ResponseEntity<List<Map<String, Object>>> stayDuration(
+            @RequestParam String cafeName,
+            @RequestParam(defaultValue = "30") int days) {
+
+        var cafeOpt = cafeRepository.findByName(cafeName);
+        if (cafeOpt.isEmpty()) return ResponseEntity.notFound().build();
+
+        Long cafeId = cafeOpt.get().getId();
+        LocalDate to   = LocalDate.now();
+        LocalDate from = to.minusDays(days - 1);
+
+        List<Ai_table> allLogs = aiLogRepository.findByCafeNameAndDateRange(
+                cafeName, from.atStartOfDay(), to.atTime(LocalTime.MAX));
+
+        // 좌석별 로그 그룹화 후 시간순 정렬
+        Map<Long, List<Ai_table>> logsBySeat = allLogs.stream()
+                .collect(Collectors.groupingBy(l -> l.getSeat().getId()));
+
+        List<Seat> seats = seatRepository.findByCafeId(cafeId);
+        List<Map<String, Object>> result = new ArrayList<>();
+
+        for (Seat seat : seats) {
+            List<Ai_table> logs = logsBySeat.getOrDefault(seat.getId(), List.of())
+                    .stream()
+                    .sorted(Comparator.comparing(Ai_table::getCreatedAt))
+                    .toList();
+
+            // active 시작 ~ available/cleaning 전환까지 세션 계산 (5분 병합)
+            List<Long> sessionMinutes = new ArrayList<>();
+            LocalDateTime sessionStart = null;
+            LocalDateTime lastActiveEnd = null;
+            final long MERGE_SECONDS = 5 * 60;
+
+            for (Ai_table log : logs) {
+                String s = log.getStatus();
+                if ("active".equals(s)) {
+                    if (sessionStart == null) {
+                        sessionStart = log.getCreatedAt();
+                    } else if (lastActiveEnd != null) {
+                        long gap = java.time.Duration.between(lastActiveEnd, log.getCreatedAt()).getSeconds();
+                        if (gap > MERGE_SECONDS) {
+                            // 새 세션
+                            long min = java.time.Duration.between(sessionStart, lastActiveEnd).toMinutes();
+                            if (min > 0) sessionMinutes.add(min);
+                            sessionStart = log.getCreatedAt();
+                        }
+                    }
+                    lastActiveEnd = null;
+                } else if ("available".equals(s) || "cleaning".equals(s)) {
+                    if (sessionStart != null) {
+                        lastActiveEnd = log.getCreatedAt();
+                    }
+                }
+            }
+            // 마지막 세션 처리
+            if (sessionStart != null && lastActiveEnd != null) {
+                long min = java.time.Duration.between(sessionStart, lastActiveEnd).toMinutes();
+                if (min > 0) sessionMinutes.add(min);
+            }
+
+            if (sessionMinutes.isEmpty()) continue;
+
+            double avg = sessionMinutes.stream().mapToLong(Long::longValue).average().orElse(0);
+            Map<String, Object> item = new LinkedHashMap<>();
+            item.put("seatName",     seat.getName());
+            item.put("floorName",    seat.getFloorName());
+            item.put("avgMinutes",   Math.round(avg * 10) / 10.0);
+            item.put("sessionCount", sessionMinutes.size());
+            item.put("maxMinutes",   sessionMinutes.stream().mapToLong(Long::longValue).max().orElse(0));
+            result.add(item);
+        }
+
+        result.sort((a, b) -> Double.compare((Double) b.get("avgMinutes"), (Double) a.get("avgMinutes")));
+        return ResponseEntity.ok(result);
+    }
+
     // 날씨-점유율 관계 데이터 (산점도용)
     @GetMapping("/weather-relation")
     public ResponseEntity<List<Map<String, Object>>> weatherRelation(
