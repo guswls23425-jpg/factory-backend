@@ -4,6 +4,7 @@ import com.cafe.cafe_server.cafatable_x_y.Cafe;
 import com.cafe.cafe_server.cafatable_x_y.CafeRepository;
 import com.cafe.cafe_server.cafatable_x_y.Seat;
 import com.cafe.cafe_server.cafatable_x_y.SeatRepository;
+import com.cafe.cafe_server.kakao.KakaoMessageService;
 import com.cafe.cafe_server.sse.SeatSseEmitterService;
 import com.cafe.cafe_server.sse.SeatUpdateEvent;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -27,6 +28,7 @@ public class Ai_db_save {
     private final Ai_db_Repository      aiDetailLogRepository;
     private final ObjectMapper          objectMapper;
     private final SeatSseEmitterService sseEmitterService;
+    private final KakaoMessageService   kakaoMessageService;
 
     // ── AI status → DB 정규화 ──────────────────────────────────────────────────
     private String mapAiStatus(String aiStatus) {
@@ -147,6 +149,14 @@ public class Ai_db_save {
 
                 aiDetailLogRepository.save(logEntity);
                 log.info("📝 [이력 저장] 좌석 {} | {}→{}", su.getSeatNumber(), prevStatus, mappedStatus);
+
+                // 카카오 알림 전송 (상태 변화 시에만)
+                String seatName = seat.getName() != null ? seat.getName() : su.getSeatNumber() + "번 테이블";
+                if ("cleaning".equals(mappedStatus)) {
+                    kakaoMessageService.sendCleaningAlert(cafeName, seatName);
+                } else if ("away".equals(mappedStatus)) {
+                    kakaoMessageService.sendUnpaidAlert(cafeName, seatName);
+                }
             }
         }
 

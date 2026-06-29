@@ -19,6 +19,7 @@ import java.util.Map;
 public class KakaoAuthController {
 
     private final KakaoAuthService kakaoAuthService;
+    private final KakaoMessageService kakaoMessageService;
 
     @Value("${kakao.rest-api-key}")
     private String restApiKey;
@@ -89,5 +90,28 @@ public class KakaoAuthController {
     public ResponseEntity<Void> disconnect(@RequestParam String cafeName) {
         kakaoAuthService.disconnect(cafeName);
         return ResponseEntity.noContent().build();
+    }
+
+    // ── 알림 설정 조회 ────────────────────────────────────────────────────────────
+    @GetMapping("/notification-setting")
+    public ResponseEntity<Map<String, Object>> getNotificationSetting(@RequestParam String cafeName) {
+        var s = kakaoMessageService.getSetting(cafeName);
+        return ResponseEntity.ok(Map.of(
+            "cleaningAlert", s.isCleaningAlert(),
+            "unpaidAlert", s.isUnpaidAlert()
+        ));
+    }
+
+    // ── 알림 설정 저장 ────────────────────────────────────────────────────────────
+    @PostMapping("/notification-setting")
+    public ResponseEntity<Map<String, Object>> updateNotificationSetting(
+            @RequestParam String cafeName,
+            @RequestParam boolean cleaningAlert,
+            @RequestParam boolean unpaidAlert) {
+        var s = kakaoMessageService.updateSetting(cafeName, cleaningAlert, unpaidAlert);
+        return ResponseEntity.ok(Map.of(
+            "cleaningAlert", s.isCleaningAlert(),
+            "unpaidAlert", s.isUnpaidAlert()
+        ));
     }
 }
