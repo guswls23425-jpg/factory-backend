@@ -33,3 +33,7 @@ weather:
 
 gemini:
   api-key: AIzaSyAQ.Ab8RN6KNv294ajVWarbl8HqQL_2Y51MO5HQOAlheCbn_Sem_Wg
+
+naver:
+  client-id: BkZDAWlQBySFIKgxLwLi
+  client-secret: iF7REL4C5y

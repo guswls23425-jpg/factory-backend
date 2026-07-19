@@ -25,7 +25,12 @@ public class TrendService {
     @Value("${gemini.api-key}")
     private String geminiApiKey;
 
-    // 매주 월요일 오전 9시 자동 업데이트
+    @Value("${naver.client-id}")
+    private String naverClientId;
+
+    @Value("${naver.client-secret}")
+    private String naverClientSecret;
+
     @Scheduled(cron = "0 0 9 * * MON")
     public void scheduledUpdate() {
         log.info("📈 [트렌드] 주간 자동 업데이트 시작");
@@ -36,7 +41,6 @@ public class TrendService {
     public List<Map<String, Object>> getOrGenerate(String cafeName) {
         List<TrendIdea> ideas = trendIdeaRepository.findByCafeNameOrderByCreatedAtDesc(cafeName);
 
-        // 7일 이상 지났거나 없으면 새로 생성
         boolean stale = ideas.isEmpty() ||
                 ideas.get(0).getCreatedAt().isBefore(LocalDateTime.now().minusDays(7));
         if (stale) {
@@ -44,6 +48,16 @@ public class TrendService {
             ideas = trendIdeaRepository.findByCafeNameOrderByCreatedAtDesc(cafeName);
         }
 
+        return toMapList(ideas);
+    }
+
+    @Transactional
+    public List<Map<String, Object>> refresh(String cafeName) {
+        generateAndSave(cafeName);
+        return toMapList(trendIdeaRepository.findByCafeNameOrderByCreatedAtDesc(cafeName));
+    }
+
+    private List<Map<String, Object>> toMapList(List<TrendIdea> ideas) {
         return ideas.stream().map(i -> {
             Map<String, Object> m = new LinkedHashMap<>();
             m.put("emoji", i.getEmoji());
@@ -54,19 +68,56 @@ public class TrendService {
         }).toList();
     }
 
-    @Transactional
-    public List<Map<String, Object>> refresh(String cafeName) {
-        generateAndSave(cafeName);
-        return getOrGenerate(cafeName);
+    // ── Naver 뉴스/블로그 검색 ──────────────────────────────────────────
+    private String fetchNaverTrends() {
+        try {
+            String[] queries = {"카페 트렌드", "카페 신메뉴", "카페 인테리어 트렌드"};
+            StringBuilder sb = new StringBuilder();
+
+            for (String q : queries) {
+                String url = "https://openapi.naver.com/v1/search/news.json?query="
+                        + java.net.URLEncoder.encode(q, "UTF-8") + "&display=5&sort=date";
+
+                HttpHeaders headers = new HttpHeaders();
+                headers.set("X-Naver-Client-Id", naverClientId);
+                headers.set("X-Naver-Client-Secret", naverClientSecret);
+
+                ResponseEntity<Map> res = restTemplate.exchange(
+                        url, HttpMethod.GET, new HttpEntity<>(headers), Map.class);
+
+                if (res.getBody() == null) continue;
+
+                List<Map<String, Object>> items = (List<Map<String, Object>>) res.getBody().get("items");
+                if (items == null) continue;
+
+                for (Map<String, Object> item : items) {
+                    String title = item.getOrDefault("title", "").toString()
+                            .replaceAll("<[^>]+>", ""); // HTML 태그 제거
+                    String desc = item.getOrDefault("description", "").toString()
+                            .replaceAll("<[^>]+>", "");
+                    sb.append("- ").append(title).append(": ").append(desc).append("\n");
+                }
+            }
+
+            return sb.toString();
+        } catch (Exception e) {
+            log.warn("⚠️ [트렌드] 네이버 검색 실패, 기본 프롬프트 사용: {}", e.getMessage());
+            return "";
+        }
     }
 
+    // ── Gemini 호출 ─────────────────────────────────────────────────────
     @SuppressWarnings("unchecked")
     private void generateAndSave(String cafeName) {
         try {
+            String naverContext = fetchNaverTrends();
+
+            String contextSection = naverContext.isBlank() ? "" :
+                    "\n\n[최신 뉴스 참고 자료]\n" + naverContext + "\n위 최신 뉴스를 참고하여 답변하세요.\n";
+
             String prompt = """
-                당신은 한국 카페 운영 컨설턴트입니다.
-                현재 한국에서 유행하는 트렌드(음식, 음료, 소품, 문화, SNS 트렌드 등)를 바탕으로
-                카페 "%s"에 바로 적용할 수 있는 창의적인 아이디어 4가지를 추천해주세요.
+                당신은 한국 카페 운영 컨설턴트입니다.%s
+                위 최신 트렌드를 바탕으로 카페 "%s"에 바로 적용할 수 있는 창의적인 아이디어 4가지를 추천해주세요.
 
                 각 아이디어는 반드시 아래 형식으로만 응답하세요 (JSON 배열):
                 [
@@ -78,7 +129,7 @@ public class TrendService {
                 ]
 
                 JSON 외 다른 텍스트는 절대 포함하지 마세요.
-                """.formatted(cafeName);
+                """.formatted(contextSection, cafeName);
 
             Map<String, Object> body = Map.of(
                 "contents", List.of(Map.of(
@@ -92,8 +143,7 @@ public class TrendService {
             String url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=" + geminiApiKey;
 
             ResponseEntity<Map> res = restTemplate.exchange(
-                url, HttpMethod.POST, new HttpEntity<>(body, headers), Map.class
-            );
+                url, HttpMethod.POST, new HttpEntity<>(body, headers), Map.class);
 
             if (res.getBody() == null) return;
 
@@ -104,7 +154,6 @@ public class TrendService {
             List<Map<String, Object>> parts = (List<Map<String, Object>>) content.get("parts");
             String text = parts.get(0).get("text").toString().trim();
 
-            // JSON 파싱
             if (text.startsWith("```")) {
                 text = text.replaceAll("```json", "").replaceAll("```", "").trim();
             }
@@ -113,7 +162,6 @@ public class TrendService {
             List<Map<String, String>> ideas = mapper.readValue(text,
                 mapper.getTypeFactory().constructCollectionType(List.class, Map.class));
 
-            // 기존 데이터 삭제 후 저장
             trendIdeaRepository.deleteByCafeName(cafeName);
             for (Map<String, String> idea : ideas) {
                 TrendIdea entity = new TrendIdea();
@@ -124,10 +172,11 @@ public class TrendService {
                 trendIdeaRepository.save(entity);
             }
 
-            log.info("✅ [트렌드] {} 아이디어 {}개 저장 완료", cafeName, ideas.size());
+            log.info("✅ [트렌드] {} 아이디어 {}개 저장 완료 (네이버 검색 {})", cafeName, ideas.size(),
+                    naverContext.isBlank() ? "미사용" : "사용");
 
         } catch (Exception e) {
-            log.error("❌ [트렌드] Gemini 호출 실패: {}", e.getMessage());
+            log.error("❌ [트렌드] 생성 실패: {}", e.getMessage());
         }
     }
 }
