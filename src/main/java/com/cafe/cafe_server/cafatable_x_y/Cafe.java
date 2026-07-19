@@ -23,6 +23,15 @@ public class Cafe {
     @Column(name = "cafe_name", unique = true, nullable = false)
     private String name;
 
+    @Column(name = "address")
+    private String address;
+
+    @Column(name = "latitude")
+    private Double latitude;
+
+    @Column(name = "longitude")
+    private Double longitude;
+
     // ✨ [추가/확인] 이 카페의 주인이 누구인지 가리키는 외래키(FK)
     @OneToOne
     @JoinColumn(name = "owner_id")
