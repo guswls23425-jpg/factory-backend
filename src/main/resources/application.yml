@@ -30,3 +30,6 @@ weather:
   api-key: 42411751ff40b6ec545dd37e1ce13dba
   city: Changwon
   country: KR
+
+gemini:
+  api-key: AIzaSyAQ.Ab8RN6KNv294ajVWarbl8HqQL_2Y51MO5HQOAlheCbn_Sem_Wg
