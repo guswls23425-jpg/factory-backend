@@ -93,14 +93,14 @@ public class TrendService {
         }).toList();
     }
 
-    // ── Naver 뉴스/블로그 검색 ──────────────────────────────────────────
+    // ── Naver 블로그 검색 ──────────────────────────────────────────────
     private String fetchNaverTrends() {
         try {
-            String[] queries = {"카페 트렌드", "카페 신메뉴", "카페 인테리어 트렌드"};
+            String[] queries = {"요즘 카페 유행", "카페 SNS 인기 메뉴", "카페 릴스 아이디어", "카페 인테리어 트렌드"};
             StringBuilder sb = new StringBuilder();
 
             for (String q : queries) {
-                String url = "https://openapi.naver.com/v1/search/news.json?query="
+                String url = "https://openapi.naver.com/v1/search/blog.json?query="
                         + java.net.URLEncoder.encode(q, "UTF-8") + "&display=5&sort=date";
 
                 HttpHeaders headers = new HttpHeaders();
@@ -144,18 +144,25 @@ public class TrendService {
             String naverContext = fetchNaverTrends();
 
             String contextSection = naverContext.isBlank() ? "" :
-                    "\n\n[최신 뉴스 참고 자료]\n" + naverContext + "\n위 최신 뉴스를 참고하여 답변하세요.\n";
+                    "\n\n[최신 블로그/SNS 트렌드 참고 자료]\n" + naverContext + "\n위 자료를 참고하여 답변하세요.\n";
 
             String prompt = """
-                당신은 한국 카페 운영 컨설턴트입니다.%s
-                위 최신 트렌드를 바탕으로 카페 "%s"에 바로 적용할 수 있는 창의적인 아이디어 4가지를 추천해주세요.
+                당신은 한국 카페 운영 전문 컨설턴트입니다.%s
+
+                틱톡, 인스타그램 릴스, 유튜브 쇼츠에서 요즘 MZ세대 사이에 바이럴되고 있는 트렌드를 반영하여
+                카페 "%s"에 바로 적용할 수 있는 SNS 감성의 창의적인 아이디어 4가지를 추천해주세요.
+
+                조건:
+                - 실제로 SNS에서 화제가 되거나 바이럴될 수 있는 아이디어
+                - 고객이 직접 찍고 공유하고 싶게 만드는 요소 포함
+                - 당장 카페에서 실행 가능한 현실적인 방법
 
                 각 아이디어는 반드시 아래 형식으로만 응답하세요 (JSON 배열):
                 [
                   {
                     "emoji": "🧸",
                     "title": "아이디어 제목 (10자 이내)",
-                    "description": "구체적인 적용 방법과 기대 효과 (2~3문장)"
+                    "description": "구체적인 적용 방법과 SNS 바이럴 포인트 (2~3문장)"
                   }
                 ]
 
