@@ -12,6 +12,8 @@ import org.springframework.web.client.RestTemplate;
 
 import java.time.LocalDateTime;
 import java.util.*;
+import java.util.concurrent.*;
+import java.util.concurrent.atomic.*;
 
 @Slf4j
 @Service
@@ -30,6 +32,29 @@ public class TrendService {
 
     @Value("${naver.client-secret}")
     private String naverClientSecret;
+
+    // 카페별 중복 호출 방지
+    private final Set<String> generating = ConcurrentHashMap.newKeySet();
+
+    // 분당 14회 이하 제한 (무료 티어 15회/분)
+    private final AtomicInteger minuteCount = new AtomicInteger(0);
+    private volatile long minuteStart = System.currentTimeMillis();
+
+    private boolean acquireRateLimit() throws InterruptedException {
+        long now = System.currentTimeMillis();
+        if (now - minuteStart >= 60_000) {
+            minuteStart = now;
+            minuteCount.set(0);
+        }
+        if (minuteCount.incrementAndGet() > 14) {
+            long wait = 60_000 - (System.currentTimeMillis() - minuteStart) + 500;
+            log.warn("⏳ [트렌드] 분당 한도 도달, {}ms 대기", wait);
+            Thread.sleep(Math.max(wait, 0));
+            minuteStart = System.currentTimeMillis();
+            minuteCount.set(1);
+        }
+        return true;
+    }
 
     @Scheduled(cron = "0 0 9 * * MON")
     public void scheduledUpdate() {
@@ -109,7 +134,13 @@ public class TrendService {
     // ── Gemini 호출 ─────────────────────────────────────────────────────
     @SuppressWarnings("unchecked")
     private void generateAndSave(String cafeName) {
+        // 이미 생성 중이면 스킵
+        if (!generating.add(cafeName)) {
+            log.info("⏭️ [트렌드] {} 이미 생성 중, 스킵", cafeName);
+            return;
+        }
         try {
+            acquireRateLimit();
             String naverContext = fetchNaverTrends();
 
             String contextSection = naverContext.isBlank() ? "" :
@@ -177,6 +208,8 @@ public class TrendService {
 
         } catch (Exception e) {
             log.error("❌ [트렌드] 생성 실패: {}", e.getMessage());
+        } finally {
+            generating.remove(cafeName);
         }
     }
 }
