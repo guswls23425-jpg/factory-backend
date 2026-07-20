@@ -88,6 +88,7 @@ public class TrendService {
             m.put("emoji", i.getEmoji());
             m.put("title", i.getTitle());
             m.put("description", i.getDescription());
+            m.put("category", i.getCategory() != null ? i.getCategory() : "idea");
             m.put("createdAt", i.getCreatedAt().toString());
             return m;
         }).toList();
@@ -96,7 +97,7 @@ public class TrendService {
     // ── Naver 블로그 검색 ──────────────────────────────────────────────
     private String fetchNaverTrends() {
         try {
-            String[] queries = {"요즘 카페 유행", "카페 SNS 인기 메뉴", "카페 릴스 아이디어", "카페 인테리어 트렌드"};
+            String[] queries = {"요즘 카페 유행", "카페 인기 음료", "베이커리 유행 디저트", "카페 릴스 아이디어"};
             StringBuilder sb = new StringBuilder();
 
             for (String q : queries) {
@@ -149,20 +150,27 @@ public class TrendService {
             String prompt = """
                 당신은 한국 카페 운영 전문 컨설턴트입니다.%s
 
+                카페 "%s"의 사장님이 유행에 뒤쳐지지 않도록 매주 트렌드 브리핑을 제공합니다.
                 틱톡, 인스타그램 릴스, 유튜브 쇼츠에서 요즘 MZ세대 사이에 바이럴되고 있는 트렌드를 반영하여
-                카페 "%s"에 바로 적용할 수 있는 SNS 감성의 창의적인 아이디어 4가지를 추천해주세요.
+                아래 두 가지를 모두 알려주세요.
 
-                조건:
-                - 실제로 SNS에서 화제가 되거나 바이럴될 수 있는 아이디어
-                - 고객이 직접 찍고 공유하고 싶게 만드는 요소 포함
-                - 당장 카페에서 실행 가능한 현실적인 방법
+                1. category "menu" — 이번 주 인기 메뉴 4가지:
+                   지금 한국 카페들에서 실제로 유행 중인 음료/베이커리 메뉴.
+                   (예: 특정 시그니처 음료, 유행 디저트, 신상 베이커리 스타일)
+                   description에는 어떤 메뉴인지와 왜 지금 인기인지 설명.
 
-                각 아이디어는 반드시 아래 형식으로만 응답하세요 (JSON 배열):
+                2. category "idea" — 적용 아이디어 4가지:
+                   SNS에서 화제가 되거나 바이럴될 수 있고, 고객이 직접 찍고 공유하고 싶게 만들며,
+                   당장 카페에서 실행 가능한 현실적인 아이디어.
+                   description에는 구체적인 적용 방법과 SNS 바이럴 포인트 설명.
+
+                반드시 아래 형식의 JSON 배열 하나로만 응답하세요 (총 8개):
                 [
                   {
-                    "emoji": "🧸",
-                    "title": "아이디어 제목 (10자 이내)",
-                    "description": "구체적인 적용 방법과 SNS 바이럴 포인트 (2~3문장)"
+                    "category": "menu",
+                    "emoji": "🍓",
+                    "title": "메뉴/아이디어 이름 (10자 이내)",
+                    "description": "설명 (2~3문장)"
                   }
                 ]
 
@@ -207,6 +215,7 @@ public class TrendService {
                 entity.setEmoji(idea.getOrDefault("emoji", "✨"));
                 entity.setTitle(idea.getOrDefault("title", ""));
                 entity.setDescription(idea.getOrDefault("description", ""));
+                entity.setCategory("menu".equals(idea.get("category")) ? "menu" : "idea");
                 trendIdeaRepository.save(entity);
             }
 

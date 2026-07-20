@@ -20,6 +20,10 @@ public class TrendIdea {
     @Column(name = "emoji", length = 10)
     private String emoji;
 
+    // menu(이번주 인기 메뉴) | idea(적용 아이디어)
+    @Column(name = "category", length = 10)
+    private String category = "idea";
+
     @Column(name = "title", nullable = false)
     private String title;
 
